@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>课程生成器 · 交互原型</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #dce4ef;
+      --line-strong: #bdcadb;
+      --green: #6aa9ef;
+      --green-soft: #edf7ff;
+      --amber: #a85f19;
+      --amber-soft: #fff0d9;
+      --red: #a7433d;
+      --red-soft: #fae9e6;
+      --blue: #5c9be3;
+      --blue-soft: #edf7ff;
+      --shadow: 0 18px 45px rgba(31, 72, 125, .10);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    button, input, textarea, select { font: inherit; }
+    button { color: inherit; }
+    .hidden { display: none !important; }
+    .shell { min-height: 100vh; }
+
+    .topbar {
+      height: 64px;
+      padding: 0 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, .94);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: blur(14px);
+    }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 760; letter-spacing: -.02em; }
+    .brand-mark {
+      width: 31px; height: 31px; border-radius: 10px;
+      display: grid; place-items: center; color: #102d4f; background: var(--green);
+      box-shadow: inset 0 -5px 12px rgba(0,0,0,.12);
+    }
+    .brand small { display: block; font-size: 10px; color: var(--muted); font-weight: 560; letter-spacing: .08em; text-transform: uppercase; }
+    .nav-actions { display: flex; align-items: center; gap: 8px; }
+    .nav-btn, .icon-btn, .btn {
+      border: 1px solid transparent; background: transparent; border-radius: 9px;
+      cursor: pointer; transition: .18s ease; white-space: nowrap;
+    }
+    .nav-btn { padding: 8px 11px; color: var(--muted); }
+    .nav-btn:hover, .nav-btn.active { background: #edf3fa; color: var(--ink); }
+    .icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border-color: var(--line); background: var(--paper); }
+    .icon-btn:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+    .btn { padding: 9px 13px; font-weight: 680; border-color: var(--line); background: var(--paper); }
+    .btn:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+    .btn.primary { background: var(--green); border-color: var(--green); color: #102d4f; }
+    .btn.warn { color: var(--amber); background: var(--amber-soft); border-color: #efd1ac; }
+    .btn.danger { color: var(--red); }
+    .btn.small { padding: 6px 9px; font-size: 12px; }
+
+    .view { display: none; }
+    .view.active { display: block; }
+    .eyebrow { color: var(--green); font-weight: 760; text-transform: uppercase; font-size: 11px; letter-spacing: .12em; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(27px, 3vw, 40px); line-height: 1.12; letter-spacing: -.035em; }
+    h2 { font-size: 21px; line-height: 1.25; letter-spacing: -.025em; }
+    h3 { font-size: 15px; }
+    .muted { color: var(--muted); }
+
+    /* Library */
+    .library { max-width: 1180px; margin: 0 auto; padding: 58px 30px 80px; }
+    .library-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 34px; }
+    .library-head p { max-width: 560px; margin-bottom: 0; color: var(--muted); font-size: 15px; }
+    .course-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .course-card {
+      min-height: 260px; padding: 23px; border: 1px solid var(--line); border-radius: 17px;
+      background: var(--paper); box-shadow: 0 8px 25px rgba(36,68,108,.05);
+      cursor: pointer; display: flex; flex-direction: column; transition: .22s ease;
+    }
+    .course-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--line-strong); }
+    .course-card .num { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: #a7aaa5; font-size: 12px; }
+    .course-card h2 { margin: 40px 0 10px; font-size: 22px; }
+    .course-card p { color: var(--muted); }
+    .card-foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 720; }
+    .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .chip.green { color: var(--green); background: var(--green-soft); }
+    .chip.amber { color: var(--amber); background: var(--amber-soft); }
+    .chip.gray { color: #6c706d; background: #eceeea; }
+    .progress-mini { width: 74px; height: 4px; background: #e4eaf2; border-radius: 9px; overflow: hidden; }
+    .progress-mini i { height: 100%; display: block; background: var(--green); border-radius: inherit; }
+
+    /* Workbench */
+    .workbench-head {
+      padding: 17px 24px; background: var(--paper); border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    }
+    .course-ident { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .back-btn { border: 0; background: transparent; font-size: 18px; cursor: pointer; color: var(--muted); }
+    .course-ident h2 { font-size: 16px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .course-ident span { color: var(--muted); font-size: 12px; }
+    .run-summary { display: flex; align-items: center; gap: 15px; }
+    .token-meter { min-width: 145px; }
+    .token-meter label { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+    .token-meter .bar { height: 5px; background: #e4eaf2; border-radius: 9px; overflow: hidden; }
+    .token-meter .bar i { display: block; width: 58%; height: 100%; background: var(--amber); }
+
+    .workbench-grid { display: grid; grid-template-columns: 250px minmax(540px, 1fr) 320px; min-height: calc(100vh - 121px); }
+    .stage-rail { background: #f0f4f9; border-right: 1px solid var(--line); padding: 23px 17px; }
+    .rail-label { padding: 0 10px 12px; font-size: 10px; color: #8a8f89; text-transform: uppercase; letter-spacing: .12em; }
+    .stage-btn {
+      width: 100%; border: 0; background: transparent; cursor: pointer; text-align: left;
+      display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center;
+      padding: 11px 10px; border-radius: 10px; margin-bottom: 3px;
+    }
+    .stage-btn:hover { background: rgba(255,255,255,.56); }
+    .stage-btn.active { background: var(--paper); box-shadow: 0 3px 14px rgba(42,79,126,.08); }
+    .stage-num { width: 25px; height: 25px; border-radius: 8px; display: grid; place-items: center; background: #e1e8f1; font-size: 11px; font-weight: 760; }
+    .stage-btn.done .stage-num { background: var(--green); color: #102d4f; }
+    .stage-btn.active .stage-num { background: var(--ink); color: #fff; }
+    .stage-name strong { display: block; font-size: 12px; }
+    .stage-name small { display: block; color: var(--muted); font-size: 10px; margin-top: 1px; }
+    .stage-state { color: var(--green); font-size: 11px; }
+    .stage-btn.locked { opacity: .63; }
+    .rail-run { border-top: 1px solid var(--line); margin-top: 20px; padding: 18px 8px; }
+    .rail-run p { font-size: 11px; color: var(--muted); margin: 5px 0; }
+
+    .workspace-main { padding: 30px clamp(24px, 4vw, 50px) 70px; overflow: auto; max-height: calc(100vh - 121px); }
+    .workspace-title { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 25px; }
+    .workspace-title h1 { font-size: 29px; margin: 5px 0 7px; }
+    .workspace-title p { color: var(--muted); max-width: 620px; margin: 0; }
+    .revision { font: 11px ui-monospace, Consolas, monospace; color: var(--muted); border: 1px solid var(--line); padding: 5px 8px; border-radius: 7px; background: var(--paper); }
+    .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+    .stat { padding: 15px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.82); }
+    .stat small { color: var(--muted); display: block; font-size: 10px; }
+    .stat strong { font-size: 20px; letter-spacing: -.03em; }
+    .panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); overflow: hidden; margin-bottom: 16px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 15px 18px; border-bottom: 1px solid var(--line); }
+    .panel-head h3 { margin: 0; }
+    .tabs { display: flex; gap: 4px; }
+    .tab { padding: 6px 9px; border: 0; background: transparent; border-radius: 7px; cursor: pointer; color: var(--muted); font-size: 12px; }
+    .tab.active { color: var(--ink); background: #edf3fa; }
+    .panel-body { padding: 19px; }
+    .chapter-strip { display: flex; gap: 9px; margin-bottom: 16px; }
+    .chapter-pill { flex: 1; padding: 10px; background: #f4f7fb; border-radius: 9px; border: 1px solid transparent; }
+    .chapter-pill.active { border-color: #96b8f4; background: var(--green-soft); }
+    .chapter-pill small { color: var(--muted); display: block; }
+    .chapter-pill strong { font-size: 12px; }
+    .md-preview { border-left: 3px solid var(--green); padding: 2px 4px 2px 19px; outline: none; }
+    .md-preview h2 { margin: 0 0 12px; font-family: Georgia, "Noto Serif SC", serif; font-size: 24px; }
+    .md-preview p { margin-bottom: 13px; color: #344054; }
+    .md-preview blockquote { margin: 16px 0; padding: 13px 15px; background: #eef5ff; border-radius: 8px; color: #29496f; }
+    .edit-banner { padding: 9px 12px; background: var(--blue-soft); color: var(--blue); border-radius: 8px; margin-bottom: 14px; font-size: 12px; }
+    .artifact-list { display: grid; gap: 8px; }
+    .artifact { display: flex; align-items: center; gap: 11px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; }
+    .artifact .file-icon { width: 29px; height: 34px; border-radius: 5px; background: #edf3fa; display: grid; place-items: center; font-size: 9px; font-weight: 760; }
+    .artifact strong { display: block; font-size: 12px; }
+    .artifact small { color: var(--muted); }
+    .artifact .hash { margin-left: auto; font: 10px ui-monospace, Consolas, monospace; color: #8b918b; }
+
+    .review-panel { background: var(--paper); border-left: 1px solid var(--line); padding: 25px 20px; overflow: auto; max-height: calc(100vh - 121px); }
+    .review-panel h2 { margin-bottom: 6px; }
+    .review-panel > p { color: var(--muted); font-size: 12px; }
+    .gate { padding: 13px; border: 1px solid var(--line); border-radius: 10px; margin: 9px 0; }
+    .gate-head { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+    .gate-head strong { font-size: 12px; }
+    .gate-head span { font-size: 11px; font-weight: 720; color: var(--green); }
+    .gate p { color: var(--muted); font-size: 11px; margin: 0; }
+    .gate.warning { border-color: #e9c89f; background: #fffaf1; }
+    .gate.warning .gate-head span { color: var(--amber); }
+    .decision-box { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 18px; }
+    .decision-box .btn { width: 100%; margin-bottom: 8px; }
+    .rework-box textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 9px; margin: 4px 0 9px; }
+    .details { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 16px; }
+    .details-toggle { width: 100%; display: flex; justify-content: space-between; border: 0; background: transparent; cursor: pointer; padding: 0; font-weight: 680; }
+    .node-list { margin-top: 12px; }
+    .node { display: grid; grid-template-columns: 10px 1fr auto; gap: 9px; align-items: start; margin: 9px 0; font-size: 11px; }
+    .node i { width: 7px; height: 7px; background: var(--green); border-radius: 50%; margin-top: 5px; }
+    .node small { color: var(--muted); display: block; }
+    .node code { color: #777e79; }
+
+    /* Generic stage cards */
+    .brief-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .brief-card { padding: 17px; border: 1px solid var(--line); border-radius: 11px; background: var(--paper); }
+    .brief-card h3 { margin-bottom: 8px; }
+    .brief-card p, .brief-card li { color: var(--muted); font-size: 12px; }
+    .brief-card ul { padding-left: 18px; margin-bottom: 0; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-weight: 680; font-size: 12px; margin-bottom: 6px; }
+    .field input, .field textarea, .field select { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 9px 10px; color: var(--ink); }
+    .field textarea { min-height: 76px; resize: vertical; }
+
+    /* Reader */
+    #readerView { --bg: #f6f9fd; background: var(--bg); min-height: 100vh; }
+    .reader-top { height: 62px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #dfe6ef; background: rgba(255,255,255,.95); position: sticky; top: 0; z-index: 25; }
+    .reader-top .course-label { font-family: Georgia, "Noto Serif SC", serif; font-size: 16px; font-weight: 700; }
+    .reader-layout { display: grid; grid-template-columns: 270px minmax(0, 760px) 210px; gap: 56px; max-width: 1390px; margin: 0 auto; padding: 48px 32px 100px; }
+    .toc { position: sticky; top: 95px; align-self: start; }
+    .toc h3 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+    .toc-section { margin: 17px 0 7px; font-size: 11px; font-weight: 760; color: #7c817d; }
+    .toc button { display: block; width: 100%; border: 0; background: transparent; text-align: left; padding: 8px 10px; border-radius: 8px; color: var(--muted); cursor: pointer; font-size: 12px; }
+    .toc button:hover, .toc button.active { background: #eaf2ff; color: var(--green); }
+    .lesson { min-width: 0; }
+    .lesson .kicker { color: var(--green); font-weight: 720; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+    .lesson h1 { font-family: Georgia, "Noto Serif SC", serif; font-size: clamp(34px, 5vw, 54px); margin: 10px 0 18px; line-height: 1.12; }
+    .lesson .lead { font-family: Georgia, "Noto Serif SC", serif; font-size: 19px; line-height: 1.75; color: #53647a; border-left: 3px solid var(--green); padding-left: 18px; margin-bottom: 36px; }
+    .lesson h2 { font-family: Georgia, "Noto Serif SC", serif; font-size: 25px; margin: 38px 0 14px; }
+    .lesson p, .lesson li { font-family: Georgia, "Noto Serif SC", serif; font-size: 17px; line-height: 1.92; color: #2f3b4d; }
+    .lesson code { font-family: ui-monospace, Consolas, monospace; font-size: .86em; background: #eaf0f7; padding: 2px 5px; border-radius: 4px; }
+    .example { margin: 28px 0; padding: 20px; background: #edf5ff; border-radius: 12px; }
+    .example strong { display: block; color: var(--green); margin-bottom: 7px; }
+    .reader-side { position: sticky; top: 95px; align-self: start; }
+    .reader-card { border: 1px solid #dce4ee; padding: 15px; border-radius: 11px; background: rgba(255,255,255,.75); margin-bottom: 12px; }
+    .reader-card small { color: var(--muted); }
+    .reader-card strong { display: block; margin: 3px 0 9px; }
+    .reader-card .bar { height: 5px; background: #e3eaf2; border-radius: 9px; }
+    .reader-card .bar i { display: block; height: 100%; width: 42%; background: var(--green); border-radius: inherit; }
+    .lesson-nav { display: flex; justify-content: space-between; gap: 15px; margin-top: 50px; border-top: 1px solid #dce4ee; padding-top: 22px; }
+
+    /* Modal and toast */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(19,25,21,.38); z-index: 80; display: grid; place-items: center; padding: 20px; }
+    .modal { width: min(650px, 100%); max-height: 88vh; overflow: auto; background: var(--paper); border-radius: 17px; box-shadow: 0 30px 80px rgba(20,25,22,.2); }
+    .modal-head { display: flex; justify-content: space-between; padding: 19px 22px; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { margin: 0; }
+    .modal-body { padding: 22px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+    .span-2 { grid-column: span 2; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); padding: 14px 22px; }
+    .toast { position: fixed; right: 24px; bottom: 24px; z-index: 100; padding: 12px 15px; border-radius: 10px; color: #fff; background: #242b27; box-shadow: var(--shadow); transform: translateY(90px); opacity: 0; transition: .25s ease; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    body.reader-mode .topbar { display: none; }
+    body.dark-reader #readerView { --bg: #1b1e1c; color: #e9eee9; }
+    body.dark-reader .reader-top { background: rgba(27,30,28,.96); border-color: #333934; }
+    body.dark-reader .lesson p, body.dark-reader .lesson li { color: #cdd4ce; }
+    body.dark-reader .lesson .lead, body.dark-reader .muted { color: #a9b2ab; }
+    body.dark-reader .toc button:hover, body.dark-reader .toc button.active { background: #29332c; }
+    body.dark-reader .reader-card { border-color: #353a36; background: #222724; }
+    body.dark-reader .example { background: #26322b; }
+
+    @media (max-width: 1100px) {
+      .workbench-grid { grid-template-columns: 220px 1fr; }
+      .review-panel { grid-column: 2; border-left: 0; border-top: 1px solid var(--line); max-height: none; }
+      .workspace-main { max-height: none; }
+      .reader-layout { grid-template-columns: 220px minmax(0, 1fr); gap: 34px; }
+      .reader-side { display: none; }
+    }
+    @media (max-width: 760px) {
+      .topbar { padding: 0 14px; }
+      .topbar .nav-btn span { display: none; }
+      .library { padding: 38px 18px 60px; }
+      .library-head { align-items: flex-start; flex-direction: column; }
+      .course-grid { grid-template-columns: 1fr; }
+      .workbench-head { padding: 13px; }
+      .token-meter { display: none; }
+      .workbench-grid { display: block; }
+      .stage-rail { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px; display: flex; overflow-x: auto; gap: 5px; }
+      .rail-label, .rail-run { display: none; }
+      .stage-btn { min-width: 118px; margin: 0; grid-template-columns: 24px 1fr; }
+      .stage-state { display: none; }
+      .workspace-main { padding: 24px 16px 50px; }
+      .workspace-title { flex-direction: column; }
+      .stat-row { grid-template-columns: 1fr; }
+      .review-panel { padding: 22px 16px; }
+      .brief-grid, .form-grid { grid-template-columns: 1fr; }
+      .span-2 { grid-column: auto; }
+      .reader-top { padding: 0 15px; }
+      .reader-layout { display: block; padding: 36px 19px 80px; }
+      .toc { position: static; margin-bottom: 35px; }
+      .toc button:not(.active), .toc-section, .toc h3 { display: none; }
+      .lesson p, .lesson li { font-size: 16px; }
+    }
+
+    /* Enhanced workflow prototype */
+    .action-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .section-note { margin: 0 0 15px; padding: 11px 13px; border: 1px solid #ccdaed; border-radius: 9px; background: #f0f6ff; color: #405f86; font-size: 12px; }
+    .section-note.amber { background: var(--amber-soft); border-color: #efd0a9; color: #85501d; }
+    .artifact-button { width: 100%; border: 1px solid var(--line); background: var(--paper); border-radius: 10px; padding: 13px 14px; display: grid; grid-template-columns: 38px 1fr auto; gap: 12px; align-items: center; text-align: left; cursor: pointer; transition: .18s ease; }
+    .artifact-button:hover { border-color: #a9b8ae; transform: translateY(-1px); box-shadow: 0 7px 20px rgba(35,47,40,.06); }
+    .artifact-button + .artifact-button { margin-top: 8px; }
+    .artifact-button .kind { width: 36px; height: 38px; border-radius: 7px; background: #eaf2ff; display: grid; place-items: center; color: var(--green); font-size: 10px; font-weight: 800; }
+    .artifact-button strong { display: block; font-size: 12px; }
+    .artifact-button small { display: block; color: var(--muted); margin-top: 2px; }
+    .artifact-button .open-hint { color: var(--green); font-size: 11px; font-weight: 700; }
+    .batch-table { display: grid; gap: 9px; }
+    .batch-card { border: 1px solid var(--line); border-radius: 11px; background: #fff; overflow: hidden; }
+    .batch-summary { width: 100%; border: 0; background: transparent; padding: 14px; display: grid; grid-template-columns: 46px 1fr auto; gap: 13px; align-items: center; text-align: left; cursor: pointer; }
+    .batch-summary:hover { background: #f8faff; }
+    .batch-summary .batch-id { width: 43px; height: 43px; border-radius: 9px; background: #eaf2ff; display: grid; place-items: center; color: var(--green); font-weight: 800; font-size: 11px; }
+    .batch-summary strong { display: block; }
+    .batch-summary small { color: var(--muted); }
+    .batch-meta { text-align: right; font-size: 11px; color: var(--muted); }
+    .batch-meta b { display: block; color: var(--ink); }
+    .batch-detail { border-top: 1px solid var(--line); background: #f8faff; padding: 16px; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .detail-cell { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+    .detail-cell h4 { margin: 0 0 7px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .detail-cell p, .detail-cell li { margin: 0; font-size: 12px; color: #48514c; }
+    .detail-cell ul { margin: 0; padding-left: 17px; }
+    .validation-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .validation-item { padding: 9px 10px; border-radius: 8px; background: var(--green-soft); color: var(--green); font-size: 11px; font-weight: 670; }
+    .validation-item::before { content: '✓'; margin-right: 7px; }
+    .batch-tabs { display: flex; gap: 7px; padding-bottom: 15px; overflow-x: auto; }
+    .batch-tab { min-width: 160px; padding: 11px 12px; border: 1px solid var(--line); background: var(--paper); border-radius: 10px; cursor: pointer; text-align: left; }
+    .batch-tab.active { border-color: #8cb2f2; background: var(--green-soft); }
+    .batch-tab.locked { opacity: .58; cursor: not-allowed; }
+    .batch-tab strong, .batch-tab small { display: block; }
+    .batch-tab small { color: var(--muted); margin-top: 2px; }
+    .chapter-table { display: grid; gap: 8px; }
+    .chapter-row { display: grid; grid-template-columns: 38px minmax(180px,1fr) repeat(3, minmax(76px,auto)) 28px; gap: 10px; align-items: center; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; cursor: pointer; }
+    .chapter-row:hover { border-color: #a9b8ae; }
+    .chapter-row .order { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: #edf3fa; font-weight: 800; font-size: 11px; }
+    .chapter-row strong { font-size: 12px; }
+    .chapter-row small { color: var(--muted); }
+    .metric-pass { color: var(--green); font-size: 11px; font-weight: 700; }
+    .timeline { display: grid; gap: 0; }
+    .timeline-step { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; position: relative; padding: 0 0 15px; font-size: 12px; }
+    .timeline-step:not(:last-child)::before { content: ''; position: absolute; left: 6px; top: 13px; bottom: 1px; width: 1px; background: #b8cdf0; }
+    .timeline-step .dot { width: 13px; height: 13px; border-radius: 50%; background: var(--green); margin-top: 3px; z-index: 1; border: 3px solid var(--green-soft); }
+    .timeline-step small { color: var(--muted); display: block; }
+    .timeline-step code { color: var(--muted); font-size: 10px; }
+    .issue-card { border: 1px solid #e6c399; border-radius: 10px; background: #fff9ee; padding: 14px; margin-bottom: 10px; }
+    .issue-card.resolved { border-color: #b8d1c1; background: #eff6f1; }
+    .issue-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
+    .issue-card p { color: #5d625e; font-size: 12px; margin-bottom: 5px; }
+    .issue-card code { font-size: 10px; color: #7e756a; }
+    .release-tree { font: 12px/1.85 ui-monospace, SFMono-Regular, Consolas, monospace; padding: 16px; border-radius: 10px; color: #34445a; background: #eff4fa; white-space: pre; overflow: auto; }
+    .stage-success { padding: 18px; background: var(--green-soft); border: 1px solid #b7cdf3; border-radius: 11px; color: var(--green); }
+    .stage-success h3 { margin: 0 0 5px; }
+    .stage-success p { margin: 0; color: #405f86; }
+    .viewer-backdrop { position: fixed; inset: 0; z-index: 120; background: rgba(17,23,19,.48); display: flex; justify-content: flex-end; }
+    .viewer { width: min(760px, 92vw); height: 100%; background: var(--paper); box-shadow: -25px 0 70px rgba(20,28,23,.18); display: flex; flex-direction: column; }
+    .viewer-head { padding: 18px 22px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+    .viewer-head h2 { margin: 0; font-size: 18px; }
+    .viewer-head small { color: var(--muted); display: block; }
+    .viewer-body { overflow: auto; padding: 24px; flex: 1; }
+    .viewer-body pre { margin: 0; padding: 18px; border-radius: 10px; background: #1f2722; color: #dce9df; font: 12px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .viewer-body .doc { max-width: 650px; }
+    .viewer-body .doc h1 { font-size: 30px; }
+    .viewer-body .doc h2 { margin-top: 30px; font-family: Georgia, "Noto Serif SC", serif; }
+    .viewer-body .doc p, .viewer-body .doc li, .viewer-body .doc blockquote { color: #3c485a; font-family: Georgia, "Noto Serif SC", serif; font-size: 15px; line-height: 1.85; }
+    .viewer-foot { display: flex; justify-content: space-between; gap: 15px; padding: 12px 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+    .viewer-body pre { margin: 0; padding: 18px; border-radius: 10px; background: #202622; color: #dae6dd; white-space: pre-wrap; word-break: break-word; font: 12px/1.75 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .viewer-body .doc { max-width: 650px; }
+    .viewer-body .doc h1 { font-size: 29px; }
+    .viewer-body .doc h2 { margin-top: 26px; }
+    .viewer-body .doc p, .viewer-body .doc li { font-family: Georgia, 'Noto Serif SC', serif; font-size: 16px; line-height: 1.85; }
+    .viewer-foot { padding: 13px 22px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 11px; }
+    .state-message { padding: 10px 12px; border-radius: 9px; background: var(--blue-soft); color: var(--blue); font-size: 12px; margin-bottom: 14px; }
+    .demo-reset { color: var(--muted); }
+    @media (max-width: 760px) {
+      .detail-grid, .validation-list { grid-template-columns: 1fr; }
+      .chapter-row { grid-template-columns: 32px 1fr 28px; }
+      .chapter-row > :nth-child(3), .chapter-row > :nth-child(4), .chapter-row > :nth-child(5) { display: none; }
+      .viewer { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">课</div>
+        <div>课程生成器</div>
+      </div>
+      <nav class="nav-actions" aria-label="主导航">
+        <button class="nav-btn" data-go="library">课程库</button>
+        <button class="nav-btn active" data-go="workbench">生成工作台</button>
+        <button class="nav-btn" data-go="reader">课程阅读</button>
+        <button class="icon-btn" title="帮助">?</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="libraryView" class="view">
+        <div class="library">
+          <div class="library-head">
+            <div>
+              <div class="eyebrow">Your courses</div>
+              <h1>把一次好对话，沉淀成一门课。</h1>
+              <p>从需求、蓝图到逐章生产与发布，每个阶段都有清楚的产物、质量门和人工决定。</p>
+            </div>
+            <button class="btn primary" id="newCourseBtn">＋ 新建课程</button>
+          </div>
+          <div class="course-grid">
+            <article class="course-card" data-open="workbench" tabindex="0">
+              <div class="num">COURSE · 003</div>
+              <h2>从零构建可靠的 RAG 系统</h2>
+              <p>面向会 Python、首次设计生产级检索增强生成系统的开发者。</p>
+              <div class="card-foot"><span class="chip amber">等待批次确认</span><div class="progress-mini"><i style="width:68%"></i></div></div>
+            </article>
+            <article class="course-card" data-open="reader" tabindex="0">
+              <div class="num">COURSE · 002</div>
+              <h2>LangGraph 工作流设计</h2>
+              <p>用可恢复状态、确定性路由和人工节点构建长时运行 Agent。</p>
+              <div class="card-foot"><span class="chip green">已发布 r0003</span><span class="muted">9 章</span></div>
+            </article>
+            <article class="course-card" data-open="workbench" tabindex="0">
+              <div class="num">COURSE · 001</div>
+              <h2>读懂 Transformer</h2>
+              <p>为产品与工程团队准备的概念课程，强调直觉、图示与小实验。</p>
+              <div class="card-foot"><span class="chip gray">蓝图草稿</span><div class="progress-mini"><i style="width:31%"></i></div></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="workbenchView" class="view active">
+        <div class="workbench-head">
+          <div class="course-ident">
+            <button class="back-btn" data-go="library" aria-label="返回课程库">←</button>
+            <div><h2>从零构建可靠的 RAG 系统</h2><span>课程工作区 · run_01J8</span></div>
+          </div>
+          <div class="run-summary">
+            <span class="chip amber">等待人工确认</span>
+            <div class="token-meter"><label><span>Token 预算</span><span>58%</span></label><div class="bar"><i></i></div></div>
+            <button class="btn small" id="pauseBtn">暂停并编辑</button>
+          </div>
+        </div>
+
+        <div class="workbench-grid">
+          <aside class="stage-rail">
+            <div class="rail-label">课程生成阶段</div>
+            <button class="stage-btn done" data-stage="1"><span class="stage-num">✓</span><span class="stage-name"><strong>课程需求</strong><small>输入与缺失项</small></span><span class="stage-state">已批准</span></button>
+            <button class="stage-btn done" data-stage="2"><span class="stage-num">✓</span><span class="stage-name"><strong>任务定义</strong><small>MISSION 与规格</small></span><span class="stage-state">已批准</span></button>
+            <button class="stage-btn done" data-stage="3"><span class="stage-num">✓</span><span class="stage-name"><strong>来源与蓝图</strong><small>证据和学习路径</small></span><span class="stage-state">已批准</span></button>
+            <button class="stage-btn done" data-stage="4"><span class="stage-num">✓</span><span class="stage-name"><strong>批次规划</strong><small>范围、预算与顺序</small></span><span class="stage-state">已批准</span></button>
+            <button class="stage-btn active" data-stage="5"><span class="stage-num">5</span><span class="stage-name"><strong>批次生产</strong><small>逐章生成与三门</small></span><span class="stage-state">待确认</span></button>
+            <button class="stage-btn locked" data-stage="6"><span class="stage-num">6</span><span class="stage-name"><strong>整课质量</strong><small>回归与修复闭环</small></span><span class="stage-state">待开始</span></button>
+            <button class="stage-btn locked" data-stage="7"><span class="stage-num">7</span><span class="stage-name"><strong>确认与发布</strong><small>RC 与交付包</small></span><span class="stage-state">待开始</span></button>
+            <div class="rail-run"><strong>本次运行</strong><p>已运行 48 分钟</p><p>184,320 / 320,000 tokens</p><p>最后保存：刚刚</p></div>
+          </aside>
+
+          <section class="workspace-main">
+            <div class="workspace-title">
+              <div><div class="eyebrow" id="stageEyebrow">Stage 05 · Production</div><h1 id="stageTitle">批次 02 已准备审阅</h1><p id="stageDescription">本批 3 个章节已通过章节质量门与批次连续性检查，等待你的决定。</p></div>
+              <span class="revision" id="revisionBadge">revision 7</span>
+            </div>
+            <div id="stageContent"></div>
+          </section>
+
+          <aside class="review-panel" id="reviewPanel"></aside>
+        </div>
+      </section>
+
+      <section id="readerView" class="view">
+        <header class="reader-top">
+          <button class="btn small" data-go="library">← 课程库</button>
+          <div class="course-label">从零构建可靠的 RAG 系统</div>
+          <div><button class="btn small" id="downloadBtn">下载 Markdown</button> <button class="icon-btn" id="themeBtn" title="切换阅读主题">◐</button></div>
+        </header>
+        <div class="reader-layout">
+          <aside class="toc">
+            <h3>课程目录</h3>
+            <div class="toc-section">模块一 · 建立模型</div>
+            <button data-lesson="1">01 为什么需要 RAG</button>
+            <button data-lesson="2">02 从问题到检索</button>
+            <button data-lesson="3">03 切分与索引</button>
+            <div class="toc-section">模块二 · 让它可靠</div>
+            <button data-lesson="4">04 混合检索</button>
+            <button class="active" data-lesson="5">05 评估检索质量</button>
+            <button data-lesson="6">06 上下文组装</button>
+            <button data-lesson="7">07 生成与引用</button>
+          </aside>
+          <article class="lesson" id="lessonArticle">
+            <div class="kicker">模块二 · 第 5 章 · 约 18 分钟</div>
+            <h1>评估检索质量：先判断“找对没有”</h1>
+            <p class="lead">一个回答看起来合理，不代表检索系统找到了正确证据。要调好 RAG，第一步是把“检索得好不好”和“模型写得好不好”拆开。</p>
+            <h2>为什么不能只看最终答案</h2>
+            <p>假设用户问：“退款申请需要在几天内提交？”系统给出了“七天”。这句话可能刚好正确，也可能只是模型根据常识猜中了。如果我们只给最终答案打分，就无法知道正确性来自检索结果，还是来自模型记忆。</p>
+            <p>检索评估关注的是更靠前的问题：返回的片段里，有没有足以回答问题的证据？这些证据是否排在模型真正能看到的位置？</p>
+            <div class="example"><strong>一个实用的检查方式</strong>为每个测试问题保存一组“应当被找到”的证据片段，然后计算前 <code>k</code> 条结果是否覆盖这些证据。开始时不必追求复杂指标，先记录命中、遗漏和错误靠前这三种情况。</div>
+            <h2>从 Recall@k 开始</h2>
+            <p><code>Recall@k</code> 回答一个直接的问题：所有相关证据中，前 k 条结果找回了多少。它适合用来发现“答案材料根本没进入上下文”的失败。</p>
+            <ul><li>如果 Recall 很低，优先检查切分、查询表达和召回策略。</li><li>如果 Recall 足够但答案仍差，再检查重排、上下文组装和生成提示。</li></ul>
+            <div class="lesson-nav"><button class="btn">← 上一章</button><button class="btn primary" id="completeLesson">完成本章，继续 →</button></div>
+          </article>
+          <aside class="reader-side">
+            <div class="reader-card"><small>课程进度</small><strong id="progressText">3 / 9 章完成</strong><div class="bar"><i id="readerProgress"></i></div></div>
+            <div class="reader-card"><small>本章目标</small><p>能用 Recall@k 定位检索阶段的证据遗漏。</p></div>
+            <div class="reader-card"><small>版本</small><strong>r0003</strong><small>发布于 2026-09-05</small></div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="newCourseModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+      <div class="modal-head"><h2 id="modalTitle">新建课程</h2><button class="icon-btn" data-close-modal>×</button></div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field span-2"><label>课程名称</label><input value="用 LangGraph 构建可靠 Agent" /></div>
+          <div class="field"><label>目标受众</label><input value="了解 Python 的应用开发者" /></div>
+          <div class="field"><label>期望章节数</label><input type="number" value="9" /></div>
+          <div class="field span-2"><label>学习目标</label><textarea>能够设计可恢复的工作流，并正确放置人工审核与质量门。</textarea></div>
+          <div class="field span-2"><label>内容范围</label><textarea>状态、节点、条件路由、checkpoint、human-in-the-loop；不讲模型训练。</textarea></div>
+          <div class="field"><label>单章有效字符下限</label><input type="number" value="3500" /></div>
+          <div class="field"><label>来源政策</label><select><option>用户资料 + 官方资料</option><option>仅内部材料</option><option>仅公开官方资料</option><option>扩展资料并交叉核验</option></select></div>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="btn" data-close-modal>取消</button><button class="btn primary" id="createCourseBtn">创建并检查需求</button></div>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    const stageData = {
+      1: {
+        eyebrow: 'Stage 01 · Intake', title: '课程需求已补全', desc: '原始输入保持不变，标准化版本已经人工批准。', rev: 'revision 3',
+        content: `<div class="brief-grid"><div class="brief-card"><h3>基本信息</h3><p><strong>课程：</strong>从零构建可靠的 RAG 系统</p><p><strong>受众：</strong>会 Python、第一次搭建生产级 RAG 的开发者</p><p><strong>章节：</strong>目标 9 章，每章不少于 3,500 有效字符</p></div><div class="brief-card"><h3>输入状态</h3><p><span class="chip green">必填项完整</span></p><p>来源政策：用户资料 + 官方资料<br>Token 上限：320,000<br>补充资料：2 个网页、1 段粘贴文本</p></div></div><div class="panel"><div class="panel-head"><h3>标准化需求</h3><span class="revision">input.v3</span></div><div class="panel-body"><div class="field"><label>学习目标</label><textarea>能设计、实现并评估一套有依据、可追踪的 RAG 系统；能定位检索、上下文和生成阶段的主要故障。</textarea></div><div class="field"><label>明确排除</label><textarea>不展开模型训练、GPU 部署与通用提示词入门。</textarea></div></div></div>`
+      },
+      2: {
+        eyebrow: 'Stage 02 · Contract', title: '任务定义已固化', desc: '“想做一门课”已经转化为可验收的课程任务。', rev: 'revision 4',
+        content: `<div class="panel"><div class="panel-head"><h3>MISSION.md</h3><button class="btn small">查看差异</button></div><div class="panel-body"><div class="md-preview"><h2>课程使命</h2><p>帮助具备 Python 基础的开发者，从“能拼出 Demo”走到“能解释、评估和维护一套 RAG 系统”。</p><blockquote><strong>学会的证据：</strong>学习者可以针对一个给定知识库，建立评估集，定位一次失败属于召回、重排、上下文还是生成阶段，并提出可验证的修复。</blockquote><p><strong>禁止范围：</strong>不虚构生产指标；不把未经核验的社区经验写成官方结论；不展开模型训练。</p></div></div></div><div class="artifact-list"><div class="artifact"><span class="file-icon">MD</span><div><strong>MISSION.md</strong><small>任务使命与证据</small></div><span class="hash">8e42…b91c</span></div><div class="artifact"><span class="file-icon">MD</span><div><strong>SPEC.md</strong><small>篇幅、预算与验收</small></div><span class="hash">b718…35e0</span></div></div>`
+      },
+      3: {
+        eyebrow: 'Stage 03 · Blueprint', title: '来源与课程蓝图已批准', desc: '9 个章节覆盖全部学习目标，来源缺口已处理。', rev: 'revision 5',
+        content: `<div class="stat-row"><div class="stat"><small>课程目标覆盖</small><strong>5 / 5</strong></div><div class="stat"><small>计划章节</small><strong>9</strong></div><div class="stat"><small>登记来源</small><strong>14</strong></div></div><div class="panel"><div class="panel-head"><h3>模块与章节路径</h3><span class="chip green">检查通过</span></div><div class="panel-body"><div class="brief-grid"><div class="brief-card"><h3>模块一 · 建立正确心智模型</h3><ul><li>01 为什么需要 RAG</li><li>02 从问题到检索</li><li>03 切分与索引</li></ul></div><div class="brief-card"><h3>模块二 · 让系统可靠</h3><ul><li>04 混合检索</li><li>05 评估检索质量</li><li>06 上下文组装</li></ul></div><div class="brief-card"><h3>模块三 · 走向交付</h3><ul><li>07 生成与引用</li><li>08 端到端评估</li><li>09 监控与迭代</li></ul></div><div class="brief-card"><h3>来源检查</h3><p>官方来源 9 · 用户资料 3 · 交叉核验 2</p><p>没有未解决的来源政策冲突。</p></div></div></div></div>`
+      },
+      4: {
+        eyebrow: 'Stage 04 · Batching', title: '批次计划已批准', desc: '章节按模块边界与预计体量分为 3 个顺序批次。Context Pack 尚未生成。', rev: 'revision 6',
+        content: `<div class="panel"><div class="panel-head"><h3>generation-plan</h3><span class="chip green">6 项校验通过</span></div><div class="panel-body"><div class="artifact-list"><div class="artifact"><span class="file-icon">B01</span><div><strong>基础模型 · 章节 01—03</strong><small>预计 12,400 字 · 58k tokens · 顺序执行</small></div><span class="hash">scope 8 refs</span></div><div class="artifact"><span class="file-icon">B02</span><div><strong>可靠性 · 章节 04—06</strong><small>预计 14,100 字 · 64k tokens · 顺序执行</small></div><span class="hash">scope 11 refs</span></div><div class="artifact"><span class="file-icon">B03</span><div><strong>交付 · 章节 07—09</strong><small>预计 12,900 字 · 61k tokens · 顺序执行</small></div><span class="hash">scope 9 refs</span></div></div></div></div><div class="edit-banner">持久化检查：阶段四只记录 Context Pack 的引用范围，当前工作区不存在提前生成的 Context Pack 文件。</div>`
+      },
+      5: {
+        eyebrow: 'Stage 05 · Production', title: '批次 02 已准备审阅', desc: '本批 3 个章节已通过章节质量门与批次连续性检查，等待你的决定。', rev: 'revision 7',
+        content: `<div class="stat-row"><div class="stat"><small>本批章节</small><strong>3 / 3</strong></div><div class="stat"><small>有效字符</small><strong>14,628</strong></div><div class="stat"><small>使用 Token</small><strong>61.4k</strong></div></div><div class="chapter-strip"><div class="chapter-pill"><small>第 04 章</small><strong>混合检索 · 通过</strong></div><div class="chapter-pill active"><small>第 05 章</small><strong>评估检索质量 · 通过</strong></div><div class="chapter-pill"><small>第 06 章</small><strong>上下文组装 · 通过</strong></div></div><div class="panel"><div class="panel-head"><div class="tabs"><button class="tab active" data-tab="preview">正文预览</button><button class="tab" data-tab="artifacts">批次产物</button><button class="tab" data-tab="diff">版本差异</button></div><button class="btn small" id="editMdBtn">编辑 Markdown</button></div><div class="panel-body" id="tabBody"><div class="md-preview" id="mdPreview"><h2>评估检索质量：先判断“找对没有”</h2><blockquote>一个回答看起来合理，不代表检索系统找到了正确证据。要调好 RAG，第一步是把“检索得好不好”和“模型写得好不好”拆开。</blockquote><p>假设用户问：“退款申请需要在几天内提交？”系统给出了“七天”。这句话可能刚好正确，也可能只是模型根据常识猜中了。如果只给最终答案打分，就无法判断正确性来自检索结果，还是来自模型记忆。</p><p>检索评估关注的是更靠前的问题：返回的片段里，有没有足以回答问题的证据？这些证据是否排在模型真正能看到的位置？</p><h3>从 Recall@k 开始</h3><p>Recall@k 回答一个直接的问题：所有相关证据中，前 k 条结果找回了多少。</p></div></div></div>`
+      },
+      6: {
+        eyebrow: 'Stage 06 · Integration', title: '整课质量闭环', desc: '所有批次通过后，在这里检查课程级一致性并管理有界修复。', rev: '尚未开始',
+        content: `<div class="stat-row"><div class="stat"><small>章节门有效</small><strong>6 / 9</strong></div><div class="stat"><small>整课 blocker</small><strong>—</strong></div><div class="stat"><small>整课闭环轮次</small><strong>0 / 3</strong></div></div><div class="panel"><div class="panel-head"><h3>阶段将在全部批次批准后启动</h3><span class="chip gray">等待前置阶段</span></div><div class="panel-body"><div class="brief-grid"><div class="brief-card"><h3>确定性回归</h3><p>检查章节清单、批准哈希、有效字符、链接、来源结构和发布输入。</p></div><div class="brief-card"><h3>语义整合审校</h3><p>检查目标覆盖、递进关系、跨章矛盾、术语、重复和综合练习。</p></div></div></div></div>`
+      },
+      7: {
+        eyebrow: 'Stage 07 · Release', title: '发布候选与交付', desc: '从通过整课质量门的 Markdown 快照构建只读 RC 和静态课程站点。', rev: '尚未开始',
+        content: `<div class="panel"><div class="panel-head"><h3>Release Candidate</h3><span class="chip gray">尚未生成</span></div><div class="panel-body"><div class="artifact-list"><div class="artifact"><span class="file-icon">JSON</span><div><strong>release.json</strong><small>版本、来源映射和完整哈希清单</small></div><span class="hash">waiting</span></div><div class="artifact"><span class="file-icon">HTML</span><div><strong>site/</strong><small>从候选 Markdown 生成的静态站点</small></div><span class="hash">waiting</span></div><div class="artifact"><span class="file-icon">ZIP</span><div><strong>course-slug-r0001.zip</strong><small>Markdown、站点与质量报告</small></div><span class="hash">waiting</span></div></div></div></div><div class="edit-banner">发布只提升不可变候选的状态。候选创建后任何绑定输入变化，都会使 RC 失效并返回阶段六。</div>`
+      }
+    };
+
+    const reviewTemplates = {
+      complete: `<h2>阶段已批准</h2><p>这份产物已被冻结。你可以查看历史或发起受控修改。</p><div class="gate"><div class="gate-head"><strong>确定性检查</strong><span>通过</span></div><p>结构、引用和版本关系有效。</p></div><div class="gate"><div class="gate-head"><strong>人工决定</strong><span>已批准</span></div><p>批准事件已记录，普通流程不会修改该版本。</p></div><div class="decision-box"><button class="btn" id="requestChangeBtn">发起修改</button></div>`,
+      pending: `<h2>批次审阅</h2><p>三个质量门和连续性证据集中在这里。warning 可知悉后批准，blocker 不可豁免。</p><div class="gate"><div class="gate-head"><strong>确定性门</strong><span>通过</span></div><p>有效字符 4,732 · Markdown 结构完整 · 引用可解析</p></div><div class="gate"><div class="gate-head"><strong>语言门</strong><span>92 / 100</span></div><p>自然度 93 · 清晰度 91 · 简洁度 90 · 具体教学 94</p></div><div class="gate"><div class="gate-head"><strong>语义门</strong><span>通过</span></div><p>事实、目标范围、教学有效性和章内逻辑均通过。</p></div><div class="gate warning"><div class="gate-head"><strong>批次连续性</strong><span>1 warning</span></div><p>第 06 章再次解释 Recall@k，可在整课审校时检查是否需要收紧。</p></div><div class="decision-box"><button class="btn primary" id="approveBtn">知悉 warning 并批准本批</button><button class="btn warn" id="reworkBtn">要求返工</button><button class="btn danger" id="stopBtn">停止运行</button><div class="rework-box hidden" id="reworkBox"><textarea placeholder="指定目标章节与修改意图…">第 05 章：请增加一个检索结果正确但排序错误的反例。</textarea><button class="btn primary small" id="submitRework">提交返工请求</button></div></div><div class="details"><button class="details-toggle" id="detailsToggle"><span>运行详情</span><span>＋</span></button><div class="node-list hidden" id="nodeList"><div class="node"><i></i><div>构建 Context Pack<small>11 个引用 · hash 已绑定</small></div><code>0 tok</code></div><div class="node"><i></i><div>Humanizer<small>变化散文片段 4 个</small></div><code>3.8k</code></div><div class="node"><i></i><div>语义审校<small>read-only · pass</small></div><code>4.3k</code></div><div class="node"><i></i><div>批次连续性<small>read-only · 1 warning</small></div><code>6.1k</code></div></div></div>`,
+      locked: `<h2>等待前置阶段</h2><p>阶段尚未启动。这里会在进入阶段后显示质量证据与人工决定。</p><div class="gate"><div class="gate-head"><strong>流程约束</strong><span style="color:#777">未运行</span></div><p>系统不会跳过前置批准或提前生成下游产物。</p></div>`
+    };
+
+    const stageContent = document.getElementById('stageContent');
+    const reviewPanel = document.getElementById('reviewPanel');
+    const stageTitle = document.getElementById('stageTitle');
+    const stageDescription = document.getElementById('stageDescription');
+    const stageEyebrow = document.getElementById('stageEyebrow');
+    const revisionBadge = document.getElementById('revisionBadge');
+    let activeStage = 5;
+
+    function showView(name) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(name + 'View').classList.add('active');
+      document.body.classList.toggle('reader-mode', name === 'reader');
+      document.querySelectorAll('[data-go]').forEach(b => b.classList.toggle('active', b.dataset.go === name));
+      window.scrollTo(0, 0);
+    }
+
+    function renderStage(num) {
+      activeStage = Number(num);
+      const data = stageData[activeStage];
+      stageEyebrow.textContent = data.eyebrow;
+      stageTitle.textContent = data.title;
+      stageDescription.textContent = data.desc;
+      revisionBadge.textContent = data.rev;
+      stageContent.innerHTML = data.content;
+      document.querySelectorAll('.stage-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.stage) === activeStage));
+      reviewPanel.innerHTML = activeStage < 5 ? reviewTemplates.complete : activeStage === 5 ? reviewTemplates.pending : reviewTemplates.locked;
+      bindDynamicActions();
+    }
+
+    function bindDynamicActions() {
+      const detailsToggle = document.getElementById('detailsToggle');
+      if (detailsToggle) detailsToggle.onclick = () => {
+        const list = document.getElementById('nodeList');
+        list.classList.toggle('hidden');
+        detailsToggle.lastElementChild.textContent = list.classList.contains('hidden') ? '＋' : '−';
+      };
+      const reworkBtn = document.getElementById('reworkBtn');
+      if (reworkBtn) reworkBtn.onclick = () => document.getElementById('reworkBox').classList.toggle('hidden');
+      const submitRework = document.getElementById('submitRework');
+      if (submitRework) submitRework.onclick = () => toast('返工请求已创建：将先计算影响范围');
+      const approveBtn = document.getElementById('approveBtn');
+      if (approveBtn) approveBtn.onclick = () => toast('已记录 warning 知悉事件，批次 02 批准');
+      const stopBtn = document.getElementById('stopBtn');
+      if (stopBtn) stopBtn.onclick = () => toast('运行已停在安全边界，检查点已保留');
+      const requestChangeBtn = document.getElementById('requestChangeBtn');
+      if (requestChangeBtn) requestChangeBtn.onclick = () => toast('修改前将先展示失效范围');
+      const editBtn = document.getElementById('editMdBtn');
+      if (editBtn) editBtn.onclick = toggleEdit;
+      document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => switchTab(tab.dataset.tab));
+    }
+
+    function toggleEdit() {
+      const preview = document.getElementById('mdPreview');
+      const btn = document.getElementById('editMdBtn');
+      if (!preview) return;
+      const editing = preview.contentEditable === 'true';
+      preview.contentEditable = editing ? 'false' : 'true';
+      preview.style.boxShadow = editing ? '' : '0 0 0 3px rgba(49,93,138,.15)';
+      btn.textContent = editing ? '编辑 Markdown' : '保存人工 revision';
+      if (editing) {
+        revisionBadge.textContent = 'revision 8';
+        toast('人工版本已保存；Agent 旧写入将被标记为 stale');
+      } else {
+        preview.focus();
+        toast('正在人工编辑：Humanizer 默认只审不改');
+      }
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      const body = document.getElementById('tabBody');
+      if (!body) return;
+      if (tab === 'artifacts') body.innerHTML = `<div class="artifact-list"><div class="artifact"><span class="file-icon">MD</span><div><strong>04-hybrid-search.md</strong><small>revision 6 · 三门通过</small></div><span class="hash">1f5a…90cf</span></div><div class="artifact"><span class="file-icon">MD</span><div><strong>05-retrieval-evaluation.md</strong><small>revision 7 · 三门通过</small></div><span class="hash">996c…7fe2</span></div><div class="artifact"><span class="file-icon">MD</span><div><strong>06-context-building.md</strong><small>revision 5 · 三门通过</small></div><span class="hash">410a…b665</span></div></div>`;
+      else if (tab === 'diff') body.innerHTML = `<div class="edit-banner">revision 6 → 7 · Humanizer 仅修改了 4 个变化散文片段</div><div class="md-preview"><p><del style="background:#fae9e6">显而易见的是，我们需要深入地对检索指标进行全面评估。</del></p><p><ins style="background:#e4f0e9;text-decoration:none">先别急着评最终答案。第一步只问：回答需要的证据，检索阶段找到了吗？</ins></p></div>`;
+      else renderStage(5);
+    }
+
+    function toast(message) {
+      const el = document.getElementById('toast');
+      el.textContent = message;
+      el.classList.add('show');
+      clearTimeout(window.toastTimer);
+      window.toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+    }
+
+    document.querySelectorAll('[data-go]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.go)));
+    document.querySelectorAll('[data-open]').forEach(card => {
+      card.addEventListener('click', () => showView(card.dataset.open));
+      card.addEventListener('keydown', e => { if (e.key === 'Enter') showView(card.dataset.open); });
+    });
+    document.querySelectorAll('.stage-btn').forEach(btn => btn.addEventListener('click', () => renderStage(btn.dataset.stage)));
+
+    const modal = document.getElementById('newCourseModal');
+    document.getElementById('newCourseBtn').onclick = () => modal.classList.remove('hidden');
+    document.querySelectorAll('[data-close-modal]').forEach(btn => btn.onclick = () => modal.classList.add('hidden'));
+    document.getElementById('createCourseBtn').onclick = () => { modal.classList.add('hidden'); showView('workbench'); renderStage(1); toast('课程已创建，正在检查需求完整性'); };
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.classList.add('hidden'); });
+
+    document.getElementById('pauseBtn').onclick = () => toast('已请求暂停：当前调用结束后停在安全边界');
+    document.getElementById('themeBtn').onclick = () => document.body.classList.toggle('dark-reader');
+    document.getElementById('downloadBtn').onclick = () => toast('原型演示：正式版将下载对应 release 的 Markdown 包');
+    let completed = 3;
+    document.getElementById('completeLesson').onclick = () => {
+      completed = Math.min(9, completed + 1);
+      document.getElementById('progressText').textContent = `${completed} / 9 章完成`;
+      document.getElementById('readerProgress').style.width = `${completed / 9 * 100}%`;
+      toast('阅读进度已更新');
+    };
+    document.querySelectorAll('[data-lesson]').forEach(btn => btn.onclick = () => {
+      document.querySelectorAll('[data-lesson]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      toast(`已切换到第 ${String(btn.dataset.lesson).padStart(2,'0')} 章（原型沿用示例正文）`);
+    });
+
+    renderStage(5);
+  </script>
+  <script>
+    (() => {
+      const STORAGE_KEY = 'zhike-complete-prototype-v2';
+      const defaults = {
+        activeStage: 4,
+        stage4Approved: false,
+        currentBatch: 0,
+        batchApproved: [false, false, false],
+        stage6RepairDone: false,
+        stage6Approved: false,
+        rcBuilt: false,
+        published: false,
+        viewBatch: 0
+      };
+      let flow = { ...defaults };
+      try { flow = { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; } catch (_) {}
+
+      const batches = [
+        { id: 'B01', module: '建立正确心智模型', chapters: '01—03', chars: '12,762', tokens: '56.8k', refs: 8,
+          titles: ['为什么需要 RAG', '从问题到检索', '切分与索引'], chapterChars: ['4,016','4,181','4,565'], scores: [93,91,92] },
+        { id: 'B02', module: '让系统可靠', chapters: '04—06', chars: '14,628', tokens: '61.4k', refs: 11,
+          titles: ['混合检索', '评估检索质量', '上下文组装'], chapterChars: ['4,681','4,732','5,215'], scores: [91,92,94] },
+        { id: 'B03', module: '走向交付', chapters: '07—09', chars: '13,104', tokens: '59.2k', refs: 9,
+          titles: ['生成与引用', '端到端评估', '监控与迭代'], chapterChars: ['4,208','4,394','4,502'], scores: [90,93,91] }
+      ];
+
+      const fileLibrary = {
+        'normalized-input.json': { type: 'code', meta: '阶段一 · revision 3 · sha256 22da…1b8f', content: `{
+  "course_name": "从零构建可靠的 RAG 系统",
+  "audience": "会 Python、首次搭建生产级 RAG 的开发者",
+  "learning_goals": [
+    "能为给定知识库设计一套可复现的 RAG 流程",
+    "能用离线评估定位召回、重排、上下文或生成问题",
+    "能建立引用、监控和持续迭代机制"
+  ],
+  "expected_chapters": 9,
+  "min_effective_chars": 3500,
+  "token_limit": 320000,
+  "source_policy": "user_plus_official",
+  "resources": ["res_user_01", "res_url_01", "res_url_02"]
+}` },
+        'MISSION.md': { type: 'doc', meta: '阶段二 · revision 4 · sha256 8e42…b91c', content: `<div class="doc"><h1>课程任务定义</h1><h2>为什么存在这门课</h2><p>帮助已经能拼出 RAG Demo 的开发者，建立一套可以解释、评估和维护的工程方法。课程不以“跑起来”为终点，而以“知道失败发生在哪里”为验收标准。</p><h2>学习完成的证据</h2><ul><li>针对一个给定知识库设计索引、检索、重排与上下文流程。</li><li>建立最小评估集，并区分检索失败与生成失败。</li><li>为关键事实提供可追踪引用，并设计发布后的监控指标。</li></ul><h2>允许与禁止</h2><p>必须覆盖混合检索、检索评估、上下文组装和引用。不得虚构生产数据，不展开模型训练、GPU 部署或通用 Prompt 入门。</p></div>` },
+        'SPEC.md': { type: 'doc', meta: '阶段二 · revision 4 · sha256 b718…35e0', content: `<div class="doc"><h1>课程生成规格</h1><h2>规模</h2><p>目标 9 章，允许在蓝图阶段提出调整。每章最终语义审校通过版本不得少于 3,500 个有效字符。</p><h2>预算</h2><p>整课上限 320,000 tokens，达到 80% 时预警。预计越限的模型调用必须在执行前暂停。</p><h2>交付</h2><p>逐章 Markdown 是正文事实源；整课通过后生成静态 HTML、Markdown 下载包、质量报告与发布清单。</p></div>` },
+        'RESOURCES.md': { type: 'doc', meta: '阶段三 · revision 5 · 14 个来源', content: `<div class="doc"><h1>来源登记</h1><h2>官方资料</h2><ul><li>LangChain：Retrieval 文档 — 已抓取，hash a81c…</li><li>OpenAI Cookbook：搜索与问答示例 — 已抓取，hash 923d…</li><li>Elasticsearch：混合检索说明 — 已抓取，hash f19a…</li></ul><h2>用户资料</h2><ul><li>团队 RAG 故障复盘（粘贴文本）— 允许引用</li><li>内部评估指标约定（粘贴文本）— 仅用于课程生成</li></ul><h2>检索结论</h2><p>关键教学事实均有至少一个允许来源。对“混合检索必然优于稠密检索”的绝对表述缺乏证据，已从蓝图中移除。</p></div>` },
+        'BLUEPRINT.md': { type: 'doc', meta: '阶段三 · revision 5 · sha256 e18c…5d29', content: `<div class="doc"><h1>课程蓝图</h1><h2>模块一：建立正确心智模型</h2><p><strong>目标：</strong>理解 RAG 的边界，并把用户问题映射为可检索的证据需求。</p><ol><li>为什么需要 RAG：区分模型记忆和外部证据。</li><li>从问题到检索：查询改写、过滤条件与召回。</li><li>切分与索引：围绕检索单元设计 chunk。</li></ol><h2>模块二：让系统可靠</h2><ol><li>混合检索：稀疏与稠密检索各自解决什么问题。</li><li>评估检索质量：Recall@k、排序失败与最小评估集。</li><li>上下文组装：证据取舍、顺序与预算。</li></ol><h2>模块三：走向交付</h2><ol><li>生成与引用</li><li>端到端评估</li><li>监控与迭代</li></ol></div>` },
+        'generation-plan.json': { type: 'code', meta: '阶段四 · revision 6 · 只记录 scope，不生成 Context Pack', content: `{
+  "execution": "sequential",
+  "batches": [
+    {
+      "id": "B01", "chapters": ["ch01", "ch02", "ch03"],
+      "estimated_chars": 12400, "token_budget": 58000,
+      "context_pack_scope": {
+        "workspace": ["MISSION.md@r4", "SPEC.md@r4", "BLUEPRINT.md@r5"],
+        "blueprint_chapters": ["ch01", "ch02", "ch03"],
+        "sources": ["res_user_01", "res_url_01", "res_url_02"]
+      },
+      "stop_conditions": ["token_budget_risk", "source_gap", "non_retryable_error"]
+    },
+    { "id": "B02", "chapters": ["ch04", "ch05", "ch06"], "estimated_chars": 14100, "token_budget": 64000 },
+    { "id": "B03", "chapters": ["ch07", "ch08", "ch09"], "estimated_chars": 12900, "token_budget": 61000 }
+  ]
+}` },
+        'context-pack-B02.json': { type: 'code', meta: '阶段五运行时生成 · 所有引用绑定 revision 与 hash', content: `{
+  "batch_id": "B02",
+  "chapter_id": "ch05",
+  "built_at": "2026-09-05T08:41:12Z",
+  "inputs": [
+    {"ref":"MISSION.md", "revision":4, "sha256":"8e42...b91c"},
+    {"ref":"BLUEPRINT.md#ch05", "revision":5, "sha256":"e18c...5d29"},
+    {"ref":"RESOURCES.md#res_url_02", "revision":3, "sha256":"923d...10af"},
+    {"ref":"lessons/04-hybrid-search.md", "revision":6, "sha256":"1f5a...90cf"}
+  ],
+  "continuity": {
+    "inherits": ["稀疏检索", "稠密检索", "重排"],
+    "must_handoff": ["把检索指标传递给端到端评估"]
+  }
+}` },
+        '05-retrieval-evaluation.md': { type: 'doc', meta: '阶段五 · revision 7 · 4,732 有效字符 · 散文 hash 996c…7fe2', content: `<div class="doc"><h1>评估检索质量：先判断“找对没有”</h1><blockquote>一个回答看起来合理，不代表检索系统找到了正确证据。要调好 RAG，第一步是把“检索得好不好”和“模型写得好不好”拆开。</blockquote><h2>为什么不能只看最终答案</h2><p>假设用户问：“退款申请需要在几天内提交？”系统给出了“七天”。这句话可能刚好正确，也可能只是模型根据常识猜中了。如果只给最终答案打分，就无法判断正确性来自检索结果，还是来自模型记忆。</p><p>检索评估关注的是更靠前的问题：返回的片段里，有没有足以回答问题的证据？这些证据是否排在模型真正能看到的位置？</p><h2>从 Recall@k 开始</h2><p>Recall@k 回答一个直接的问题：所有相关证据中，前 k 条结果找回了多少。它适合发现“答案材料根本没进入上下文”的失败。</p><h2>练习</h2><p>为你的知识库写 10 个真实问题，并为每个问题标注一段必须找回的证据。分别查看 k=3 与 k=10 时的命中差异，记录遗漏来自查询、切分还是召回策略。</p></div>` },
+        'chapter-quality-B02.json': { type: 'code', meta: '阶段五 · gate 记录绑定内容 hash 与 revision', content: `{
+  "batch_id": "B02",
+  "chapter_id": "ch05",
+  "revision": 7,
+  "content_hash": "996c...7fe2",
+  "gates": {
+    "deterministic": {"status":"pass", "effective_chars":4732},
+    "language": {
+      "status":"pass", "total":92,
+      "dimensions":{"naturalness":93,"clarity":91,"concision":90,"concrete_teaching":94},
+      "blockers":[]
+    },
+    "semantic": {"status":"pass", "warnings":[]}
+  }
+}` },
+        'course-quality-report.md': { type: 'doc', meta: '阶段六 · 整课回归 revision 2', content: `<div class="doc"><h1>整课质量汇总</h1><h2>确定性回归</h2><p>9/9 章节文件齐全；内部链接有效；全部章节有效字符达标；三门记录均与当前 hash、revision 匹配。</p><h2>语义整合</h2><p><strong>发现 1 个可自动修复 blocker：</strong>第 8 章使用了“命中率”一词，但本章语境实际指 Recall@k，与第 5 章术语定义冲突。根因清晰、单章可定位、无传播影响。</p><h2>Warning</h2><p>第 6 章与第 8 章均简述了上下文预算，存在少量重复，但承担不同教学作用，可以保留。</p></div>` },
+        'repair-plan.md': { type: 'doc', meta: '阶段六 · 四要素修复计划', content: `<div class="doc"><h1>整课修复计划</h1><h2>根因</h2><p>第 8 章将 Recall@k 错称为“命中率”，与第 5 章定义不一致。</p><h2>目标章节及顺序</h2><ol><li>仅修改第 8 章术语出现位置。</li></ol><h2>传播范围</h2><p>依赖索引未发现其他章节引用这段定义；无需重开前章。</p><h2>需要重跑的门</h2><p>确定性预检 → Humanizer（散文变化）→ 确定性回归 → 语义门 → 整课回归。</p></div>` },
+        'release.json': { type: 'code', meta: '阶段七 · RC r0001 · immutable', content: `{
+  "schema_version": "1.0",
+  "course": "reliable-rag",
+  "release_version": "r0001",
+  "status_source": "database",
+  "renderer": {"name":"course-static-builder", "version":"1.0.0"},
+  "sources": [
+    {"path":"courses/reliable-rag/course.json", "revision":8, "sha256":"71ac...b90f"},
+    {"path":"courses/reliable-rag/lessons/05-retrieval-evaluation.md", "revision":7, "sha256":"996c...7fe2"}
+  ],
+  "files": [
+    {"path":"site/index.html", "sha256":"a116...012c"},
+    {"path":"site/lessons/05.html", "sha256":"17d8...936b"},
+    {"path":"markdown/course.md", "sha256":"820b...64ae"},
+    {"path":"quality/report.json", "sha256":"fe80...188a"}
+  ],
+  "acknowledged_warnings": ["continuity:minimal-repetition:ch06-ch08"]
+}` }
+      };
+
+      fileLibrary['context-pack-B01.json'] = { ...fileLibrary['context-pack-B02.json'], meta: '阶段五运行时生成 · B01 · 8 个引用均绑定 revision 与 hash', content: fileLibrary['context-pack-B02.json'].content.replaceAll('B02','B01').replaceAll('ch05','ch02').replaceAll('ch04','ch01') };
+      fileLibrary['context-pack-B03.json'] = { ...fileLibrary['context-pack-B02.json'], meta: '阶段五运行时生成 · B03 · 9 个引用均绑定 revision 与 hash', content: fileLibrary['context-pack-B02.json'].content.replaceAll('B02','B03').replaceAll('ch05','ch08').replaceAll('ch04','ch07') };
+      fileLibrary['chapter-quality-B01.json'] = { ...fileLibrary['chapter-quality-B02.json'], meta: '阶段五 · B01 章节质量汇总 · hash/revision 绑定', content: fileLibrary['chapter-quality-B02.json'].content.replaceAll('B02','B01').replaceAll('ch05','ch02').replace('4732','4181').replace('92','91') };
+      fileLibrary['chapter-quality-B03.json'] = { ...fileLibrary['chapter-quality-B02.json'], meta: '阶段五 · B03 章节质量汇总 · hash/revision 绑定', content: fileLibrary['chapter-quality-B02.json'].content.replaceAll('B02','B03').replaceAll('ch05','ch08').replace('4732','4394').replace('92','93') };
+      fileLibrary['02-query-to-retrieval.md'] = { ...fileLibrary['05-retrieval-evaluation.md'], meta: '阶段五 · B01 代表章节 · revision 6 · 4,181 有效字符', content: fileLibrary['05-retrieval-evaluation.md'].content.replace('评估检索质量：先判断“找对没有”','从问题到检索：先把问题变成证据需求') };
+      fileLibrary['08-end-to-end-evaluation.md'] = { ...fileLibrary['05-retrieval-evaluation.md'], meta: '阶段五 · B03 代表章节 · revision 8 · 4,394 有效字符', content: fileLibrary['05-retrieval-evaluation.md'].content.replace('评估检索质量：先判断“找对没有”','端到端评估：判断答案是否有证据支撑') };
+
+      const persist = () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(flow)); } catch (_) {} };
+      const esc = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+      const qs = selector => document.querySelector(selector);
+
+      function topStatus() {
+        const chip = qs('.run-summary .chip');
+        if (!chip) return;
+        if (flow.published) { chip.className = 'chip green'; chip.textContent = '已发布 r0001'; }
+        else if (flow.activeStage === 7 && flow.rcBuilt) { chip.className = 'chip amber'; chip.textContent = 'RC 等待发布'; }
+        else { chip.className = 'chip amber'; chip.textContent = '等待人工确认'; }
+      }
+
+      function isUnlocked(stage) {
+        if (stage <= 4) return true;
+        if (stage === 5) return flow.stage4Approved;
+        if (stage === 6) return flow.batchApproved.every(Boolean);
+        return flow.stage6Approved;
+      }
+
+      function isApproved(stage) {
+        if (stage <= 3) return true;
+        if (stage === 4) return flow.stage4Approved;
+        if (stage === 5) return flow.batchApproved.every(Boolean);
+        if (stage === 6) return flow.stage6Approved;
+        return flow.published;
+      }
+
+      function updateRail() {
+        document.querySelectorAll('.stage-btn').forEach(button => {
+          const stage = Number(button.dataset.stage);
+          const unlocked = isUnlocked(stage);
+          const approved = isApproved(stage);
+          button.classList.toggle('done', approved);
+          button.classList.toggle('locked', !unlocked);
+          button.classList.toggle('active', stage === flow.activeStage);
+          const num = button.querySelector('.stage-num');
+          const status = button.querySelector('.stage-state');
+          num.textContent = approved ? '✓' : String(stage);
+          if (approved) status.textContent = '已批准';
+          else if (!unlocked) status.textContent = '待开始';
+          else if (stage === 5) status.textContent = `批次 ${Math.min(flow.currentBatch + 1, 3)}/3`;
+          else if (stage === 7 && flow.rcBuilt) status.textContent = '待发布';
+          else status.textContent = '待确认';
+        });
+        topStatus();
+      }
+
+      function stageHeader(stage, title, desc, revision) {
+        const labels = ['','INTAKE','CONTRACT','BLUEPRINT','BATCHING','PRODUCTION','INTEGRATION','RELEASE'];
+        stageEyebrow.textContent = `STAGE ${String(stage).padStart(2,'0')} · ${labels[stage]}`;
+        stageTitle.textContent = title;
+        stageDescription.textContent = desc;
+        revisionBadge.textContent = revision;
+      }
+
+      function artifactButton(name, note, kind = 'MD') {
+        return `<button class="artifact-button" data-artifact="${name}"><span class="kind">${kind}</span><span><strong>${name}</strong><small>${note}</small></span><span class="open-hint">查看内容 →</span></button>`;
+      }
+
+      function intakeContent() {
+        return `<div class="stat-row"><div class="stat"><small>必填字段</small><strong>8 / 8</strong></div><div class="stat"><small>补充资源</small><strong>3</strong></div><div class="stat"><small>待确认问题</small><strong>0</strong></div></div>
+          <div class="panel"><div class="panel-head"><h3>结构化课程需求</h3><span class="chip green">完整</span></div><div class="panel-body"><div class="form-grid"><div class="field span-2"><label>课程名称</label><input value="从零构建可靠的 RAG 系统" readonly></div><div class="field"><label>目标受众</label><input value="会 Python 的应用开发者" readonly></div><div class="field"><label>期望章节</label><input value="9 章" readonly></div><div class="field span-2"><label>学习目标</label><textarea readonly>能够设计一套可解释、可评估的 RAG 流程；能定位检索、上下文和生成阶段的故障。</textarea></div><div class="field"><label>有效字符下限</label><input value="3,500 / 章" readonly></div><div class="field"><label>来源政策</label><input value="用户资料 + 官方资料" readonly></div></div></div></div>
+          <div class="panel"><div class="panel-head"><h3>输入产物</h3><span class="revision">raw input immutable</span></div><div class="panel-body">${artifactButton('normalized-input.json','标准化输入 · revision 3 · 下游只读取已批准版本','JSON')}</div></div>`;
+      }
+
+      function contractContent() {
+        return `<div class="section-note">阶段二把课程愿望固化为可验收任务。点击文件可查看实际内容，而不是只看文件名。</div><div class="panel"><div class="panel-head"><h3>任务合同产物</h3><span class="chip green">确定性检查通过</span></div><div class="panel-body">${artifactButton('MISSION.md','为什么学、学会的证据、允许与禁止范围')}${artifactButton('SPEC.md','篇幅、Token、交付格式与验收要求')}</div></div><div class="brief-grid"><div class="brief-card"><h3>可观察目标</h3><ul><li>设计可复现的检索流程</li><li>建立最小离线评估集</li><li>定位各阶段失败原因</li></ul></div><div class="brief-card"><h3>硬约束</h3><ul><li>禁止虚构生产数据</li><li>关键事实必须有来源</li><li>不得默默修改章节数与预算</li></ul></div></div>`;
+      }
+
+      function blueprintContent() {
+        return `<div class="stat-row"><div class="stat"><small>课程目标覆盖</small><strong>5 / 5</strong></div><div class="stat"><small>规划章节</small><strong>9</strong></div><div class="stat"><small>批准来源</small><strong>14</strong></div></div><div class="panel"><div class="panel-head"><h3>来源与蓝图</h3><span class="chip green">无来源缺口</span></div><div class="panel-body">${artifactButton('RESOURCES.md','来源登记、抓取快照与检索结论')}${artifactButton('BLUEPRINT.md','模块目标、逐章计划、依赖和预计体量')}</div></div><div class="panel"><div class="panel-head"><h3>章节依赖索引</h3><span class="revision">9 chapters · 14 sources</span></div><div class="panel-body"><div class="validation-list"><div class="validation-item">每个目标至少被一章覆盖</div><div class="validation-item">每章服务于明确目标</div><div class="validation-item">前置概念早于使用位置</div><div class="validation-item">章节来源符合政策</div></div></div></div>`;
+      }
+
+      function batchDetail(batch, index) {
+        return `<div class="batch-detail hidden" id="batch-detail-${index}"><div class="detail-grid"><div class="detail-cell"><h4>章节范围</h4><p>${batch.titles.map((t,i) => `${String(index*3+i+1).padStart(2,'0')} ${t}`).join('<br>')}</p></div><div class="detail-cell"><h4>预算与停止条件</h4><p>预计 ${batch.chars} 字<br>${batch.tokens} token 预算<br>越限风险、来源缺口或不可恢复错误时暂停</p></div><div class="detail-cell"><h4>Context Pack 引用范围</h4><ul><li>MISSION.md@r4</li><li>SPEC.md@r4</li><li>BLUEPRINT.md 对应章节</li><li>${batch.refs} 个来源引用</li></ul></div><div class="detail-cell"><h4>执行与依赖</h4><p>批内逐章串行；本批完成后才能进入下一批。当前不承诺并发执行。</p></div></div></div>`;
+      }
+
+      function batchingContent() {
+        return `<div class="section-note amber">阶段四只保存批次计划和可解析的 Context Pack 引用范围；真正的 Context Pack 文件统一在阶段五生成。</div><div class="panel"><div class="panel-head"><h3>批次计划</h3><button class="btn small" data-artifact="generation-plan.json">查看原始 JSON</button></div><div class="panel-body"><div class="batch-table">${batches.map((batch,index) => `<div class="batch-card"><button class="batch-summary" data-batchdetail="${index}"><span class="batch-id">${batch.id}</span><span><strong>${batch.module} · 章节 ${batch.chapters}</strong><small>点击展开 scope、预算、依赖和停止条件</small></span><span class="batch-meta"><b>${batch.chars} 字</b>${batch.tokens} tokens</span></button>${batchDetail(batch,index)}</div>`).join('')}</div></div></div><div class="panel"><div class="panel-head"><h3>阶段退出校验</h3><span class="chip green">6 / 6 通过</span></div><div class="panel-body"><div class="validation-list"><div class="validation-item">每章恰属一个批次</div><div class="validation-item">章节顺序连续</div><div class="validation-item">未跨模块边界</div><div class="validation-item">预算级可行</div><div class="validation-item">scope 引用可解析</div><div class="validation-item">未提前生成 Context Pack</div></div></div></div>`;
+      }
+
+      function productionContent() {
+        const active = Math.min(flow.viewBatch, 2);
+        const batch = batches[active];
+        const representativeLesson = ['02-query-to-retrieval.md','05-retrieval-evaluation.md','08-end-to-end-evaluation.md'][active];
+        const approvedCount = flow.batchApproved.filter(Boolean).length;
+        return `<div class="stat-row"><div class="stat"><small>已批准批次</small><strong>${approvedCount} / 3</strong></div><div class="stat"><small>已通过章节</small><strong>${approvedCount * 3 + (active === flow.currentBatch ? 3 : 0)} / 9</strong></div><div class="stat"><small>累计 Token</small><strong>${['56.8k','118.2k','177.4k'][Math.min(flow.currentBatch,2)]}</strong></div></div><div class="batch-tabs">${batches.map((item,index) => { const locked = index > flow.currentBatch && !flow.batchApproved[index]; const label = flow.batchApproved[index] ? '已批准' : index === flow.currentBatch ? '待审阅' : '等待前批'; return `<button class="batch-tab ${index===active?'active':''} ${locked?'locked':''}" data-viewbatch="${index}" ${locked?'disabled':''}><strong>${item.id} · ${item.module}</strong><small>${label} · ${item.chapters}</small></button>`; }).join('')}</div><div class="panel"><div class="panel-head"><h3>${batch.id} · 章节质量结果</h3><div class="action-row"><button class="btn small" data-artifact="context-pack-${batch.id}.json">查看 Context Pack</button><button class="btn small" data-artifact="chapter-quality-${batch.id}.json">查看质量 JSON</button></div></div><div class="panel-body"><div class="chapter-table">${batch.titles.map((title,i) => `<div class="chapter-row" data-artifact="${representativeLesson}"><span class="order">${String(active*3+i+1).padStart(2,'0')}</span><span><strong>${title}</strong><small>revision ${7-i} · 点击查看本批代表正文</small></span><span class="metric-pass">${batch.chapterChars[i]} 字</span><span class="metric-pass">语言 ${batch.scores[i]}</span><span class="metric-pass">语义通过</span><span>›</span></div>`).join('')}</div></div></div><div class="panel"><div class="panel-head"><h3>本批执行轨迹</h3><span class="revision">完整闭环</span></div><div class="panel-body"><div class="timeline"><div class="timeline-step"><span class="dot"></span><span><strong>Context Pack 构建</strong><small>${batch.refs} 个引用均绑定 revision 与 hash</small></span><code>0 tok</code></div><div class="timeline-step"><span class="dot"></span><span><strong>逐章正文生成</strong><small>一次调用只写一章，批内顺序执行</small></span><code>${active===1?'41.2k':'38.7k'}</code></div><div class="timeline-step"><span class="dot"></span><span><strong>Humanizer 与确定性回归</strong><small>只处理变化散文片段</small></span><code>8.4k</code></div><div class="timeline-step"><span class="dot"></span><span><strong>语义门与批次连续性</strong><small>只读审校 · 无 blocker · 1 warning</small></span><code>11.8k</code></div></div></div></div>`;
+      }
+
+      function integrationContent() {
+        if (!flow.stage6RepairDone) return `<div class="stat-row"><div class="stat"><small>有效章节门</small><strong>9 / 9</strong></div><div class="stat"><small>整课 blocker</small><strong>1</strong></div><div class="stat"><small>闭环轮次</small><strong>0 / 3</strong></div></div><div class="panel"><div class="panel-head"><h3>整课回归结果</h3><button class="btn small" data-artifact="course-quality-report.md">查看完整报告</button></div><div class="panel-body"><div class="issue-card"><div class="issue-head"><strong>术语定义跨章不一致</strong><span class="chip amber">可自动修复</span></div><p>第 8 章把 Recall@k 写成“命中率”，与第 5 章已经批准的定义冲突。</p><code>fingerprint: terminology/ch08/4a81… · 单章根因明确 · 无传播影响</code></div><div class="section-note">系统已判定满足有界自动返工条件；你仍可先查看四要素修复计划。</div>${artifactButton('repair-plan.md','根因、目标章节及顺序、传播范围、需重跑门')}</div></div>`;
+        return `<div class="stat-row"><div class="stat"><small>有效章节门</small><strong>9 / 9</strong></div><div class="stat"><small>整课 blocker</small><strong>0</strong></div><div class="stat"><small>闭环轮次</small><strong>1 / 3</strong></div></div><div class="stage-success"><h3>整课质量门已闭合</h3><p>第 8 章定向修复通过；章节三门与整课回归均绑定当前 hash 和 revision。</p></div><div class="panel"><div class="panel-head"><h3>修复验证</h3><button class="btn small" data-artifact="course-quality-report.md">查看更新报告</button></div><div class="panel-body"><div class="issue-card resolved"><div class="issue-head"><strong>术语定义跨章不一致</strong><span class="chip green">resolved</span></div><p>第 8 章已统一使用 Recall@k，重新通过 Humanizer、确定性、语义和整课回归。</p><code>closed_by: verified_repair · revision 8</code></div><div class="issue-card"><div class="issue-head"><strong>少量概念重复</strong><span class="chip amber">warning</span></div><p>第 6 章与第 8 章都简述上下文预算，但教学职责不同。进入阶段七时需绑定知悉事件。</p></div></div></div>`;
+      }
+
+      function releaseContent() {
+        if (!flow.rcBuilt) return `<div class="panel"><div class="panel-head"><h3>发布候选</h3><span class="chip gray">尚未构建</span></div><div class="panel-body"><div class="section-note">构建器将锁定全部可见事实源，复制获批 Markdown，再从候选包内 Markdown 生成 HTML。</div><div class="release-tree">releases/reliable-rag/r0001/
+├── release.json
+├── site/
+├── markdown/
+└── quality/</div></div></div>`;
+        return `<div class="stat-row"><div class="stat"><small>候选版本</small><strong>r0001</strong></div><div class="stat"><small>包内文件</small><strong>31</strong></div><div class="stat"><small>清单校验</small><strong>通过</strong></div></div><div class="stage-success"><h3>${flow.published ? 'r0001 已正式发布' : 'RC 已构建并保持有效'}</h3><p>${flow.published ? '发布只提升状态；候选内容与所有哈希均未改变。' : 'HTML 全量构建与确定性检查已经通过，等待最终人工发布。'}</p></div><div class="panel"><div class="panel-head"><h3>可交付发布包</h3><span class="chip ${flow.published?'green':'amber'}">${flow.published?'published':'candidate'}</span></div><div class="panel-body">${artifactButton('release.json','版本、来源谱系、warning 知悉和 SHA-256 清单','JSON')}<div class="release-tree" style="margin-top:10px">reliable-rag-r0001.zip
+├── release.json
+├── site/index.html + lessons/ + assets/
+├── markdown/course.md + lessons/
+└── quality/report.json + report.md</div></div></div>`;
+      }
+
+      function reviewFor(stage) {
+        if (stage <= 3) return `<h2>阶段已批准</h2><p>产物已冻结。点击中间区域的文件，可查看批准时的具体内容。</p><div class="gate"><div class="gate-head"><strong>确定性检查</strong><span>通过</span></div><p>当前产物 hash 与批准事件一致。</p></div><div class="gate"><div class="gate-head"><strong>人工决定</strong><span>已批准</span></div><p>普通下游流程不会修改该版本。</p></div><div class="decision-box"><button class="btn" data-demoaction="controlled-change">发起受控修改</button></div>`;
+        if (stage === 4) {
+          if (flow.stage4Approved) return `<h2>批次计划已批准</h2><p>计划已冻结，阶段五可据此在运行时生成 Context Pack。</p><div class="gate"><div class="gate-head"><strong>退出校验</strong><span>6 / 6 通过</span></div><p>覆盖、顺序、模块、预算、scope 与持久化约束均通过。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="goto-5">进入批次生产</button><button class="btn" data-demoaction="controlled-change">发起修改</button></div>`;
+          return `<h2>批准批次计划</h2><p>建议先展开批次并查看 JSON。批准后才允许阶段五生成 Context Pack。</p><div class="gate"><div class="gate-head"><strong>覆盖与顺序</strong><span>通过</span></div><p>9 章恰属一个批次，顺序连续且未跨模块。</p></div><div class="gate"><div class="gate-head"><strong>预算可行性</strong><span>通过</span></div><p>仅进行预算级判断，不把估算体量当成内容验收。</p></div><div class="gate"><div class="gate-head"><strong>Scope 与持久化</strong><span>通过</span></div><p>引用均可解析，且没有提前生成 Context Pack。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="approve-stage4">批准并进入批次生产</button><button class="btn warn" data-demoaction="rework">要求修改计划</button><button class="btn danger" data-demoaction="stop">停止运行</button></div>`;
+        }
+        if (stage === 5) {
+          if (flow.batchApproved.every(Boolean)) return `<h2>阶段已完成</h2><p>三个批次均经人工批准，可进入整课质量闭环。</p><div class="gate"><div class="gate-head"><strong>批次交付</strong><span>3 / 3</span></div><p>9 个章节当前版本均有有效三门记录。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="goto-6">进入整课质量</button></div>`;
+          const batch = batches[flow.currentBatch];
+          return `<h2>${batch.id} 批次审阅</h2><p>正文、质量记录和执行轨迹均可在中间区域展开查看。</p><div class="gate"><div class="gate-head"><strong>确定性门</strong><span>通过</span></div><p>三章均达到有效字符下限，结构与引用可解析。</p></div><div class="gate"><div class="gate-head"><strong>语言门</strong><span>${Math.round(batch.scores.reduce((a,b)=>a+b,0)/3)} / 100</span></div><p>四维分别过线；没有语言 blocker。</p></div><div class="gate"><div class="gate-head"><strong>语义门</strong><span>通过</span></div><p>事实、范围、教学有效性和章内逻辑通过。</p></div><div class="gate warning"><div class="gate-head"><strong>连续性审校</strong><span>1 warning</span></div><p>轻微概念重复，已进入连续性账本，不阻塞批次批准。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="approve-batch">知悉 warning，批准 ${batch.id}</button><button class="btn warn" data-demoaction="rework">要求本批返工</button><button class="btn danger" data-demoaction="stop">停止运行</button></div>`;
+        }
+        if (stage === 6) {
+          if (flow.stage6Approved) return `<h2>整课质量已确认</h2><p>全部 blocker 已闭合，warning 知悉事件已与本次确认绑定。</p><div class="gate"><div class="gate-head"><strong>整课确定性</strong><span>通过</span></div><p>全量构建输入与质量记录有效。</p></div><div class="gate"><div class="gate-head"><strong>整课语义</strong><span>通过</span></div><p>跨章一致性与学习目标闭合。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="goto-7">进入发布候选</button></div>`;
+          if (!flow.stage6RepairDone) return `<h2>整课修复入口</h2><p>发现一个根因清晰、仅涉及单章的 blocker，可走有界自动返工。</p><div class="gate warning"><div class="gate-head"><strong>整课语义门</strong><span>1 blocker</span></div><p>第 8 章术语与第 5 章定义冲突。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="run-repair">执行单章有界修复</button><button class="btn warn" data-demoaction="rework">人工调整修复范围</button><button class="btn danger" data-demoaction="stop">停止运行</button></div>`;
+          return `<h2>确认整课质量</h2><p>自动修复已验证通过。下方 warning 不阻塞，但必须与进入阶段七的确认动作绑定知悉。</p><div class="gate"><div class="gate-head"><strong>确定性与语义</strong><span>通过</span></div><p>9 个章节和整课检查均绑定当前 revision。</p></div><div class="gate warning"><div class="gate-head"><strong>未解决 warning</strong><span>1 条</span></div><p>第 6、8 章存在少量有教学职责的重复。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="approve-stage6">知悉 warning，确认并进入发布</button><button class="btn warn" data-demoaction="rework">继续修复</button></div>`;
+        }
+        if (!flow.rcBuilt) return `<h2>创建发布候选</h2><p>构建完整、不可变的发布包，并从包内 Markdown 生成 HTML。</p><div class="gate"><div class="gate-head"><strong>阶段六基线</strong><span>有效</span></div><p>所有事实源、质量门和 warning 知悉事件均可追溯。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="build-rc">构建 RC r0001</button><button class="btn warn" data-demoaction="rework">返回阶段六返工</button></div>`;
+        if (!flow.published) return `<h2>最终发布确认</h2><p>候选包已构建。发布只提升状态，不修改任何候选字节。</p><div class="gate"><div class="gate-head"><strong>HTML 与包清单</strong><span>通过</span></div><p>31 个文件 SHA-256 校验一致，站点链接完整。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="publish">正式发布 r0001</button><button class="btn" data-demoaction="open-reader">打开 HTML 预览</button><button class="btn warn" data-demoaction="rework-stage6">要求返工并作废 RC</button></div>`;
+        return `<h2>发布完成</h2><p>r0001 已成为当前正式版本，发布事件和不可变交付包均已保存。</p><div class="gate"><div class="gate-head"><strong>发布状态</strong><span>published</span></div><p>旧版本可追溯；后续修改将创建新的 RC。</p></div><div class="decision-box"><button class="btn primary" data-demoaction="open-reader">打开正式课程</button><button class="btn" data-artifact="release.json">查看 release.json</button><button class="btn" data-demoaction="download-package">下载交付包</button></div>`;
+      }
+
+      function renderEnhanced(requestedStage = flow.activeStage) {
+        if (!isUnlocked(requestedStage)) { toast(`阶段 ${requestedStage} 尚未解锁，请先完成前置阶段`); return; }
+        flow.activeStage = Number(requestedStage);
+        persist();
+        const currentStage = flow.activeStage;
+        if (currentStage === 1) { stageHeader(1,'课程需求已补全','原始输入不可变；下游只读取已批准的标准化版本。','revision 3'); stageContent.innerHTML = intakeContent(); }
+        if (currentStage === 2) { stageHeader(2,'可验收任务已固化','课程使命、边界、预算和交付标准已经形成明确合同。','revision 4'); stageContent.innerHTML = contractContent(); }
+        if (currentStage === 3) { stageHeader(3,'来源与课程蓝图已批准','来源先于写作，章节计划覆盖全部课程目标。','revision 5'); stageContent.innerHTML = blueprintContent(); }
+        if (currentStage === 4) { stageHeader(4,flow.stage4Approved?'批次计划已批准':'请审阅批次计划','展开每个批次可查看章节范围、预算、Context Pack scope 和停止条件。','revision 6'); stageContent.innerHTML = batchingContent(); }
+        if (currentStage === 5) { const complete = flow.batchApproved.every(Boolean); stageHeader(5,complete?'全部批次已批准':`${batches[flow.currentBatch].id} 已准备审阅`,'批次是人工交付单元；章节是生成、检查与定向修复单元。',`revision ${7 + flow.currentBatch}`); stageContent.innerHTML = productionContent(); }
+        if (currentStage === 6) { stageHeader(6,flow.stage6Approved?'整课质量已确认':flow.stage6RepairDone?'修复完成，等待整课确认':'发现 1 个整课 blocker','整课审校只读；所有正文修改都返回目标章节的有界修复循环。',`integration revision ${flow.stage6RepairDone?2:1}`); stageContent.innerHTML = integrationContent(); }
+        if (currentStage === 7) { stageHeader(7,flow.published?'r0001 已发布':flow.rcBuilt?'RC r0001 等待最终发布':'创建发布候选','候选绑定所有事实源与构建输入；发布仅提升不可变版本状态。',flow.rcBuilt?'r0001':'尚未创建'); stageContent.innerHTML = releaseContent(); }
+        reviewPanel.innerHTML = reviewFor(currentStage);
+        updateRail();
+        bindEnhancedActions();
+      }
+
+      function openArtifact(name) {
+        const file = fileLibrary[name];
+        if (!file) { toast(`原型中暂未放入 ${name}`); return; }
+        document.querySelector('.viewer-backdrop')?.remove();
+        const wrap = document.createElement('div');
+        wrap.className = 'viewer-backdrop';
+        wrap.innerHTML = `<section class="viewer" role="dialog" aria-modal="true"><div class="viewer-head"><div><h2>${name}</h2><small>${file.meta}</small></div><button class="icon-btn" data-closeviewer>×</button></div><div class="viewer-body">${file.type === 'code' ? `<pre>${esc(file.content)}</pre>` : file.content}</div><div class="viewer-foot"><span>只读产物预览</span><span>路径、revision 与 hash 会进入审计事件</span></div></section>`;
+        document.body.appendChild(wrap);
+        wrap.querySelector('[data-closeviewer]').onclick = () => wrap.remove();
+        wrap.onclick = event => { if (event.target === wrap) wrap.remove(); };
+      }
+
+      function reworkPrompt() {
+        const existing = reviewPanel.querySelector('.rework-box');
+        if (existing) { existing.remove(); return; }
+        const box = document.createElement('div');
+        box.className = 'rework-box';
+        box.innerHTML = `<textarea aria-label="返工意见" placeholder="指定目标章节与修改意图…">请补充目标章节、要解决的问题和必须保留的内容。</textarea><button class="btn primary small" data-submitrework>提交返工请求</button>`;
+        reviewPanel.querySelector('.decision-box')?.appendChild(box);
+        box.querySelector('[data-submitrework]').onclick = () => toast('返工请求已记录；系统将先计算传播范围，再从最早失效阶段恢复');
+      }
+
+      function act(action) {
+        if (action === 'approve-stage4') { flow.stage4Approved = true; flow.activeStage = 5; flow.viewBatch = 0; toast('阶段四已批准，已进入 B01 批次审阅'); }
+        if (action === 'goto-5') flow.activeStage = 5;
+        if (action === 'approve-batch') {
+          flow.batchApproved[flow.currentBatch] = true;
+          if (flow.currentBatch < 2) { flow.currentBatch += 1; flow.viewBatch = flow.currentBatch; toast(`${batches[flow.currentBatch-1].id} 已批准，下一批产物已载入`); }
+          else { flow.currentBatch = 3; flow.activeStage = 6; toast('三个批次全部批准，已进入整课质量闭环'); }
+        }
+        if (action === 'goto-6') flow.activeStage = 6;
+        if (action === 'run-repair') { flow.stage6RepairDone = true; toast('第 8 章定向修复完成，整课回归已重新通过'); }
+        if (action === 'approve-stage6') { flow.stage6Approved = true; flow.activeStage = 7; toast('warning 知悉事件已绑定，已进入发布阶段'); }
+        if (action === 'goto-7') flow.activeStage = 7;
+        if (action === 'build-rc') { flow.rcBuilt = true; toast('RC r0001 已构建：31 个文件校验通过'); }
+        if (action === 'publish') { flow.published = true; toast('r0001 已正式发布'); }
+        if (action === 'open-reader') { showView('reader'); return; }
+        if (action === 'download-package') { toast('原型演示：reliable-rag-r0001.zip 已准备下载'); return; }
+        if (action === 'rework-stage6') { flow.rcBuilt = false; flow.published = false; flow.stage6Approved = false; flow.activeStage = 6; toast('RC 已作废，返工意见已带回阶段六'); }
+        if (action === 'rework') { reworkPrompt(); return; }
+        if (action === 'controlled-change') { toast('将先展示修改影响范围，不会直接作废无关产物'); return; }
+        if (action === 'stop') { toast('运行已停在安全边界，全部检查点和产物已保留'); return; }
+        persist();
+        renderEnhanced(flow.activeStage);
+      }
+
+      function bindEnhancedActions() {
+        document.querySelectorAll('[data-artifact]').forEach(button => button.onclick = event => { event.stopPropagation(); openArtifact(button.dataset.artifact); });
+        document.querySelectorAll('[data-batchdetail]').forEach(button => button.onclick = () => document.getElementById(`batch-detail-${button.dataset.batchdetail}`)?.classList.toggle('hidden'));
+        document.querySelectorAll('[data-viewbatch]').forEach(button => button.onclick = () => { flow.viewBatch = Number(button.dataset.viewbatch); persist(); renderEnhanced(5); });
+        document.querySelectorAll('[data-demoaction]').forEach(button => button.onclick = () => act(button.dataset.demoaction));
+      }
+
+      // Replace stage buttons to remove listeners from the earlier lightweight prototype.
+      document.querySelectorAll('.stage-btn').forEach(oldButton => {
+        const button = oldButton.cloneNode(true);
+        oldButton.replaceWith(button);
+        button.onclick = () => renderEnhanced(Number(button.dataset.stage));
+      });
+
+      const resetButton = document.createElement('button');
+      resetButton.className = 'btn small demo-reset';
+      resetButton.textContent = '重置演示';
+      resetButton.title = '回到阶段四待确认状态';
+      resetButton.onclick = () => { flow = { ...defaults, batchApproved:[false,false,false] }; persist(); showView('workbench'); renderEnhanced(4); toast('演示状态已重置'); };
+      qs('.run-summary')?.appendChild(resetButton);
+
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') document.querySelector('.viewer-backdrop')?.remove();
+      });
+
+      renderEnhanced(flow.activeStage);
+    })();
+  </script>
+</body>
+</html>

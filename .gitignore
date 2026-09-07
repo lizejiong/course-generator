@@ -1,0 +1,32 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Generated course data
+courses/
+releases/
+
+# Local agent and temporary files
+.agents/
+.codex/
+work/
+
+# Operating systems
+.DS_Store
+Thumbs.db
+
