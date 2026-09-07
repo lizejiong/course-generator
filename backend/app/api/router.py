@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db.models import Artifact, Course, Run
 from app.schemas.api import CourseCreate, CoursePatch, FileWrite, ReviewDecision, RunCreate
+from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.courses import CourseService
 from app.services.jobs import JobService
 from app.services.reviews import ReviewService
@@ -137,11 +139,22 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
             target = CourseService(db, settings.courses_root).editable_path(course, path)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temporary = target.with_name(f".{target.name}.tmp")
-        temporary.write_text(payload.content, encoding="utf-8")
-        temporary.replace(target)
-        return {"path": path, "saved": True}
+        previous = target.read_bytes() if target.exists() else b""
+        content = payload.content.encode("utf-8")
+        artifact = ArtifactService(db).write(
+            course,
+            ArtifactWrite(
+                course_id=course.id,
+                run_id=None,
+                node_name="manual_edit",
+                scope=path,
+                round_no=0,
+                input_hash=hashlib.sha256(previous + b"\0" + content).hexdigest(),
+                logical_path=path,
+                content=content,
+            ),
+        )
+        return {"path": path, "saved": True, "revision": artifact.revision}
 
     @router.get("/courses/{course_id}/releases")
     def list_releases(course_id: UUID, db: Session = Depends(session)):

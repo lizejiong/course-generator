@@ -4,6 +4,8 @@ import shutil
 from pathlib import Path
 
 from jinja2 import BaseLoader, Environment
+from markdown_it import MarkdownIt
+from markupsafe import Markup
 
 from app.db.models import Course
 
@@ -28,12 +30,22 @@ class ReleaseService:
         markdown_dir.mkdir(parents=True)
         site_dir.mkdir()
         quality_dir.mkdir()
+        (site_dir / "assets").mkdir()
+        (site_dir / "assets" / "site.css").write_text(
+            "body{font-family:system-ui,sans-serif;max-width:760px;"
+            "margin:2rem auto;line-height:1.7}",
+            encoding="utf-8",
+        )
+        renderer = MarkdownIt("commonmark", {"html": False})
         for lesson in sorted((workspace / "lessons").glob("*.md")):
             shutil.copy2(lesson, markdown_dir / lesson.name)
             html = (
                 Environment(loader=BaseLoader(), autoescape=True)
                 .from_string(_TEMPLATE)
-                .render(title=lesson.stem, body=f"<pre>{lesson.read_text(encoding='utf-8')}</pre>")
+                .render(
+                    title=lesson.stem,
+                    body=Markup(renderer.render(lesson.read_text(encoding="utf-8"))),
+                )
             )
             (site_dir / f"{lesson.stem}.html").write_text(html, encoding="utf-8")
         quality = workspace / "quality.json"
