@@ -53,8 +53,8 @@ class ReleaseService:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest["status"] != "rc":
             raise ValueError("only a valid release candidate can be published")
-        manifest["status"] = "published"
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        # A publication decision is an append-only review event in PostgreSQL.
+        # The RC directory, including its manifest, must never be modified.
         return manifest
 
     @staticmethod
