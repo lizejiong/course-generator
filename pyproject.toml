@@ -1,0 +1,40 @@
+[project]
+name = "course-generator"
+version = "0.1.0"
+description = "Backend for the Course Generator V1"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "alembic>=1.14",
+  "fastapi>=0.115",
+  "httpx>=0.28",
+  "jinja2>=3.1",
+  "langgraph>=0.2",
+  "langgraph-checkpoint-postgres>=2.0",
+  "markdown-it-py>=3.0",
+  "openai>=1.54",
+  "psycopg[binary,pool]>=3.2",
+  "pydantic-settings>=2.6",
+  "pygments>=2.18",
+  "sqlalchemy>=2.0",
+  "trafilatura>=2.0",
+  "uvicorn[standard]>=0.32",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "pytest-cov>=6.0", "ruff>=0.8"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = "-ra"
+pythonpath = ["backend"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["backend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.uv]
+package = false

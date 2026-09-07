@@ -1,0 +1,1 @@
+"""Course Generator backend package."""
