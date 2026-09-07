@@ -8,7 +8,7 @@ from app.workflows.state import WorkflowState
 Node = Callable[[WorkflowState], dict]
 
 
-def build_main_graph(nodes: dict[str, Node]):
+def build_main_graph(nodes: dict[str, Node], checkpointer=None):
     """Seven observable stages in one flat graph; only chapter work is a subgraph."""
     required = {
         "requirements",
@@ -35,7 +35,8 @@ def build_main_graph(nodes: dict[str, Node]):
             "humanize": nodes["chapter_humanize"],
             "semantic": nodes["chapter_semantic"],
             "aggregate": nodes["chapter_aggregate"],
-        }
+        },
+        checkpointer=checkpointer,
     )
     graph = StateGraph(WorkflowState)
     for name in (
@@ -56,4 +57,4 @@ def build_main_graph(nodes: dict[str, Node]):
     graph.add_edge("chapter_cycle", "course_quality")
     graph.add_edge("course_quality", "release")
     graph.add_edge("release", END)
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)

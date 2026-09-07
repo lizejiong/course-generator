@@ -7,7 +7,7 @@ from app.workflows.state import WorkflowState
 ChapterNode = Callable[[WorkflowState], dict]
 
 
-def build_chapter_cycle(nodes: dict[str, ChapterNode]):
+def build_chapter_cycle(nodes: dict[str, ChapterNode], checkpointer=None):
     """Build the only reusable subgraph; every node persists content outside state."""
     required = {"context_pack", "write", "precheck", "humanize", "semantic", "aggregate"}
     missing = required - nodes.keys()
@@ -32,4 +32,4 @@ def build_chapter_cycle(nodes: dict[str, ChapterNode]):
     graph.add_edge("humanize", "semantic")
     graph.add_edge("semantic", "aggregate")
     graph.add_conditional_edges("aggregate", after_aggregate, {"write": "write", END: END})
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
