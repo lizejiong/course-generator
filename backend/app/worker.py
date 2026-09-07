@@ -37,6 +37,12 @@ class Worker:
                 if outcome == "waiting_human":
                     run.status = "waiting_human"
                     jobs.succeed(job)
+                elif outcome == "paused":
+                    run.status = "paused"
+                    jobs.succeed(job)
+                elif outcome == "stopped":
+                    run.status = "stopped"
+                    jobs.succeed(job)
                 elif run.stop_requested:
                     run.status = "stopped"
                     jobs.succeed(job)
