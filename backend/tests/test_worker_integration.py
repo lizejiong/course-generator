@@ -112,3 +112,26 @@ def test_batch_plan_has_parseable_context_scope_and_course_quality_detects_missi
     )
     run.current_stage = 6
     assert runner._write_course_quality(db_session, course, run)
+
+
+def test_worker_builds_then_publishes_final_release_after_human_event(settings, db_session) -> None:
+    course = CourseService(db_session, settings.courses_root).create("release-worker", {})
+    lessons = settings.courses_root / "release-worker" / "lessons"
+    (lessons / "01-intro.md").write_text("# Intro\n\nBody", encoding="utf-8")
+    run = Run(course_id=course.id, thread_id=str(uuid4()), current_stage=7)
+    db_session.add(run)
+    db_session.flush()
+    JobService(db_session).enqueue(run, "start")
+    db_session.commit()
+    factory = sessionmaker(db_session.bind, expire_on_commit=False)
+    worker = Worker(factory, "test-worker", WorkflowRunner(settings).execute)
+
+    assert worker.run_once()
+    with factory.begin() as session:
+        persisted = session.get(Run, run.id)
+        assert persisted and persisted.status == "waiting_human"
+        ReviewService(session).decide(persisted, scope="release", target="r0001", action="approve")
+    assert worker.run_once()
+    with factory.begin() as session:
+        persisted = session.get(Run, run.id)
+        assert persisted and persisted.status == "completed"
