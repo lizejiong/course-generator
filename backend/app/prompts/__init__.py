@@ -18,6 +18,7 @@ _PROMPTS = {
     "chapter_writer": "chapter_writer.md",
     "natural_language_editor": "natural_language_editor.md",
     "semantic_reviewer": "semantic_reviewer.md",
+    "schema_repair": "schema_repair.md",
 }
 _PROMPT_ROOT = Path(__file__).parent
 _REPOSITORY_ROOT = _PROMPT_ROOT.parents[2]

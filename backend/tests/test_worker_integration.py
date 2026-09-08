@@ -81,6 +81,26 @@ class CountingGateway(ScriptedGateway):
         return super().complete(*args, **kwargs)
 
 
+class SchemaRepairGateway(ScriptedGateway):
+    def __init__(self) -> None:
+        self.responses = iter(
+            [
+                "# Chapter\n\nA useful explanation with an example and exercise.",
+                "not valid JSON",
+                '{"markdown":"# Chapter\\n\\nA clear lesson with an example and exercise.",'
+                '"scores":{"naturalness":90,"clarity":90,"conciseness":90,"teaching":90},'
+                '"findings":[]}',
+                '{"outcomes":{"facts_sources":"pass","goals_scope":"pass",'
+                '"teaching":"pass","logic_continuity":"pass"},"findings":[]}',
+            ]
+        )
+        self.calls = 0
+
+    def complete(self, *args, **kwargs) -> ModelResult:
+        self.calls += 1
+        return ModelResult(next(self.responses), 1, 1, "test-model")
+
+
 def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) -> None:
     course = CourseService(db_session, settings.courses_root).create(
         "quality-course", {"min_effective_chars_per_chapter": 1}
@@ -134,6 +154,26 @@ def test_chapter_cycle_reuses_durable_model_outputs_after_a_retry(settings, db_s
         "lessons/01-cached-quality-course.md",
     )
     assert gateway.calls == 3
+
+
+def test_chapter_cycle_repairs_one_invalid_structured_model_output(settings, db_session) -> None:
+    course = CourseService(db_session, settings.courses_root).create(
+        "schema-repair-course", {"min_effective_chars_per_chapter": 1}
+    )
+    run = Run(course_id=course.id, thread_id=str(uuid4()), current_stage=5)
+    db_session.add(run)
+    db_session.flush()
+    gateway = SchemaRepairGateway()
+    assert WorkflowRunner(settings)._chapter_quality_cycle(
+        db_session,
+        course,
+        run,
+        gateway,
+        {"id": "chapter-1", "title": "Chapter", "number": 1},
+        uuid4(),
+        "lessons/01-schema-repair-course.md",
+    )
+    assert gateway.calls == 4
 
 
 def test_batch_plan_has_parseable_context_scope_and_course_quality_detects_missing_lessons(

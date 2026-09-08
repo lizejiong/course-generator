@@ -1,5 +1,6 @@
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from langgraph.checkpoint.base import empty_checkpoint
@@ -343,18 +344,21 @@ class WorkflowRunner:
             logical_path=path,
             round_no=round_no,
         )
-        payload = self._model_json(content)
-        return (
-            {
-                "markdown": str(payload["markdown"]),
-                "scores": {
-                    name: int(payload["scores"][name])
-                    for name in ("naturalness", "clarity", "conciseness", "teaching")
-                },
-                "findings": self._findings(payload.get("findings", [])),
-            },
-            artifact,
-        )
+        try:
+            return self._humanizer_payload(content), artifact
+        except (KeyError, TypeError, ValueError):
+            content, artifact = self._cached_model_output(
+                session,
+                course,
+                run,
+                gateway,
+                node="humanizer",
+                operation="repair_humanizer_schema",
+                prompt=self._schema_repair_prompt(prompt),
+                logical_path=path,
+                round_no=round_no,
+            )
+            return self._humanizer_payload(content), artifact
 
     def _semantic_review(
         self,
@@ -379,7 +383,21 @@ class WorkflowRunner:
             logical_path=f"workspace/quality/{chapter_id}-round-{round_no}-semantic.json",
             round_no=round_no,
         )
-        payload = self._model_json(content)
+        try:
+            payload = self._semantic_payload(content)
+        except (KeyError, TypeError, ValueError):
+            content, _ = self._cached_model_output(
+                session,
+                course,
+                run,
+                gateway,
+                node="semantic_review",
+                operation="repair_semantic_schema",
+                prompt=self._schema_repair_prompt(prompt),
+                logical_path=f"workspace/quality/{chapter_id}-round-{round_no}-semantic.json",
+                round_no=round_no,
+            )
+            payload = self._semantic_payload(content)
         outcomes = {
             name: payload["outcomes"][name]
             for name in ("facts_sources", "goals_scope", "teaching", "logic_continuity")
@@ -387,6 +405,30 @@ class WorkflowRunner:
         return semantic_gate(
             markdown, revision, outcomes, self._findings(payload.get("findings", []))
         )
+
+    def _schema_repair_prompt(self, original: RenderedPrompt) -> RenderedPrompt:
+        repair = render_prompt("schema_repair", original=original.content)
+        return replace(repair, skill_name=original.skill_name, skill_hash=original.skill_hash)
+
+    def _humanizer_payload(self, content: str) -> dict:
+        payload = self._model_json(content)
+        scores = {
+            name: int(payload["scores"][name])
+            for name in ("naturalness", "clarity", "conciseness", "teaching")
+        }
+        return {
+            "markdown": str(payload["markdown"]),
+            "scores": scores,
+            "findings": self._findings(payload.get("findings", [])),
+        }
+
+    def _semantic_payload(self, content: str) -> dict:
+        payload = self._model_json(content)
+        outcomes = payload["outcomes"]
+        required = ("facts_sources", "goals_scope", "teaching", "logic_continuity")
+        if not isinstance(outcomes, dict) or any(name not in outcomes for name in required):
+            raise ValueError("semantic review did not return every required outcome")
+        return payload
 
     def _cached_model_output(
         self,
