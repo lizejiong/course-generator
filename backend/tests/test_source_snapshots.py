@@ -37,5 +37,5 @@ def test_internal_only_policy_rejects_url_fetching(tmp_path: Path) -> None:
     (workspace / ".artifacts").mkdir(parents=True)
     course = Course(id=uuid4(), slug="source-course", workspace_path=str(workspace))
     service = SourceSnapshotService(MemorySession())  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="forbids"):
+    with pytest.raises(ValueError, match="禁止联网"):
         service.capture(course, uuid4(), ["https://example.com"], "internal_only")

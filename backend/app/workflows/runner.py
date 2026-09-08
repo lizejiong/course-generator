@@ -118,37 +118,37 @@ class WorkflowRunner:
                 "workspace/INPUT.json",
                 self._definition(course),
             )
-            run.node_summary = "requirements snapshot ready for approval"
+            run.node_summary = "课程需求快照已生成，等待人工审核"
         elif stage == 2:
             self._write_task_definition(session, course, run)
-            run.node_summary = "MISSION.md and SPEC.md ready for approval"
+            run.node_summary = "MISSION.md 与 SPEC.md 已生成，等待人工审核"
         elif stage == 3:
             self._write_blueprint(session, course, run)
-            run.node_summary = "sources and blueprint ready for approval"
+            run.node_summary = "来源登记与课程蓝图已生成，等待人工审核"
         elif stage == 4:
             self._write_batches(session, course, run)
-            run.node_summary = "batch plan ready for approval; no Context Pack was generated"
+            run.node_summary = "批次计划已生成，尚未创建 Context Pack，等待人工审核"
         elif stage == 5:
             if not self.settings.openai_api_key:
                 run.error_code = "model_not_configured"
-                run.error_summary = "OPENAI_API_KEY is required before chapter production"
+                run.error_summary = "开始章节生成前必须配置 OPENAI_API_KEY"
                 return "paused"
             try:
                 if not self._produce_chapters(session, course, run):
                     return "waiting_human"
             except TokenBudgetPause:
                 return "paused"
-            run.node_summary = "batch production completed; quality evidence awaits approval"
+            run.node_summary = "批次章节已生成，质量证据等待人工审核"
         elif stage == 6:
             blockers = self._write_course_quality(session, course, run)
             run.node_summary = (
-                "course-wide deterministic quality blockers need review"
+                "整课确定性质量门发现 blocker，等待人工处理"
                 if blockers
-                else "course-wide quality review ready for approval"
+                else "整课质量审查已完成，等待人工审核"
             )
         elif stage == 7:
             ReleaseService(self.settings.releases_root).build_rc(course)
-            run.node_summary = "immutable release candidate ready for final approval"
+            run.node_summary = "不可变发布候选已生成，等待最终人工批准"
         else:
             raise ValueError(f"unknown stage {stage}")
         return "waiting_human"
@@ -170,10 +170,10 @@ class WorkflowRunner:
         title = definition.get("title", course.slug)
         audience = definition.get("audience", "self-directed learners")
         goals = definition.get("learning_goals", [])
-        mission = f"# {title}\n\nAudience: {audience}\n\nGoals:\n" + "\n".join(
+        mission = f"# {title}\n\n## 目标受众\n\n{audience}\n\n## 学习目标\n" + "\n".join(
             f"- {goal}" for goal in goals
         )
-        spec = "# Acceptance criteria\n\n" + "\n".join(f"- {goal}" for goal in goals)
+        spec = "# 课程验收标准\n\n" + "\n".join(f"- {goal}" for goal in goals)
         self._write_artifact(
             session, course, run, "task_definition", "workspace/MISSION.md", mission.encode()
         )
@@ -202,11 +202,11 @@ class WorkflowRunner:
             resources,
             source_policy,
         )
-        resource_markdown = "# Resources\n\n" + "\n".join(
+        resource_markdown = "# 来源登记\n\n" + "\n".join(
             f"- {snapshot['origin']} ({snapshot['sha256']})" for snapshot in snapshots
         )
-        blueprint_markdown = "# Course Blueprint\n\n" + "\n".join(
-            f"## {chapter['title']}\n\n- Chapter ID: {chapter['id']}" for chapter in chapters
+        blueprint_markdown = "# 课程蓝图\n\n" + "\n".join(
+            f"## {chapter['title']}\n\n- 章节 ID：{chapter['id']}" for chapter in chapters
         )
         self._write_artifact(
             session, course, run, "sources", "workspace/RESOURCES.md", resource_markdown.encode()

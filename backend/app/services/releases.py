@@ -62,7 +62,7 @@ class ReleaseService:
             .from_string(_TEMPLATE)
             .render(
                 title=course.slug,
-                body=Markup("<h1>Course</h1><ul>" + "".join(index_links) + "</ul>"),
+                body=Markup("<h1>课程目录</h1><ul>" + "".join(index_links) + "</ul>"),
             )
         )
         (site_dir / "index.html").write_text(index, encoding="utf-8")

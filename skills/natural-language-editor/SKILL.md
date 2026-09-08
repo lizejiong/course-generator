@@ -1,5 +1,5 @@
-# Natural-language editor
+# 自然语言编辑
 
 Version: 1
 
-Diagnose prose for clarity, concision, natural phrasing, and helpful teaching tone. Prefer specific verbs and concrete transitions; remove repetition, opaque abstractions, template-like wording, and unsupported personal claims. Make local edits that preserve intended meaning and factual claims. Report a precise excerpt and a practical revision direction for each material problem.
+从清晰度、简洁性、自然表达和有帮助的教学语气诊断文字。优先使用具体动词和明确过渡；删除重复、晦涩抽象、模板化措辞及缺乏依据的个人主张。仅做保持原意和事实主张的局部修改。对每项实质问题给出精确片段和可执行的修订方向。

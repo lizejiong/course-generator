@@ -63,9 +63,13 @@ def deterministic_gate(markdown: str, revision: int, minimum: int) -> GateResult
     findings: list[Finding] = []
     count = effective_characters(markdown)
     if count < minimum:
-        findings.append(Finding("minimum_effective_characters", "document", f"{count} < {minimum}"))
+        findings.append(
+            Finding(
+                "minimum_effective_characters", "文档", f"有效字符数 {count} 少于下限 {minimum}"
+            )
+        )
     if "# " not in markdown:
-        findings.append(Finding("chapter_title", "document", "missing level-one title"))
+        findings.append(Finding("chapter_title", "文档", "缺少一级章节标题"))
     return GateResult(
         "deterministic",
         content_hash(markdown),

@@ -29,7 +29,7 @@ class SourceSnapshotService:
         for index, resource in enumerate(resources, start=1):
             if isinstance(resource, str) and resource.startswith(("http://", "https://")):
                 if source_policy == "internal_only":
-                    raise ValueError("source policy forbids network retrieval")
+                    raise ValueError("当前来源政策禁止联网抓取")
                 snapshot = self.fetcher(resource)
                 origin = snapshot.url
                 content = snapshot.content

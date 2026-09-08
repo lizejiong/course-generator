@@ -13,6 +13,9 @@ _EDITABLE = re.compile(
     r"^(course\.json|workspace/(MISSION|SPEC|BLUEPRINT|RESOURCES)\.md|"
     r"workspace/batches/[a-zA-Z0-9_-]+\.json|lessons/[0-9]{2,3}-[a-z0-9-]+\.md)$"
 )
+SOURCE_POLICIES = frozenset(
+    {"user_plus_official", "internal_only", "official_only", "extended_cross_checked"}
+)
 
 
 def validate_course_definition(definition: dict) -> None:
@@ -27,16 +30,21 @@ def validate_course_definition(definition: dict) -> None:
     )
     missing = [field for field in required if definition.get(field) in (None, "", [])]
     if missing:
-        raise ValueError(f"missing required course fields: {', '.join(missing)}")
+        raise ValueError(f"课程必填字段缺失：{', '.join(missing)}")
     if (
         not isinstance(definition["learning_goals"], list)
         or not 3 <= len(definition["learning_goals"]) <= 7
     ):
-        raise ValueError("learning_goals must contain 3 to 7 observable goals")
+        raise ValueError("学习目标必须包含 3 至 7 条可观察目标")
     if int(definition["expected_chapter_count"]) < 1:
-        raise ValueError("expected_chapter_count must be positive")
+        raise ValueError("期望章节数必须为正整数")
     if int(definition["min_effective_chars_per_chapter"]) < 1:
-        raise ValueError("min_effective_chars_per_chapter must be positive")
+        raise ValueError("单章有效字符下限必须为正整数")
+    if definition["source_policy"] not in SOURCE_POLICIES:
+        raise ValueError(
+            "来源政策必须是以下之一：user_plus_official、internal_only、official_only、"
+            "extended_cross_checked"
+        )
 
 
 class CourseService:

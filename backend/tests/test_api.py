@@ -67,6 +67,15 @@ def test_course_archive_and_restore_are_non_destructive(settings, db_session) ->
     assert restored.json()["archived"] is False
 
 
+def test_course_create_rejects_unknown_source_policy(settings, db_session) -> None:
+    client = TestClient(create_app(settings))
+    payload = definition()
+    payload["source_policy"] = "anything_goes"
+    response = client.post("/api/courses", json={"slug": "bad-policy", "definition": payload})
+    assert response.status_code == 422
+    assert "来源政策" in response.json()["detail"]
+
+
 def test_release_api_projects_published_state_from_immutable_review_event(
     settings, db_session
 ) -> None:

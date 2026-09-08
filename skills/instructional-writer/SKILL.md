@@ -1,5 +1,5 @@
-# Instructional writer
+# 教学写作
 
 Version: 1
 
-Organize teaching around a learner's next usable capability. Explain concepts in a concrete sequence, use one representative example, then include a practice activity that lets the learner apply the idea. Prefer direct language, define unfamiliar terms at first use, and distinguish facts from assumptions. When revising, preserve correct material and improve only the passage that needs work.
+围绕学习者下一步可实际运用的能力组织教学。按具体顺序解释概念，使用一个有代表性的示例，再给出可让学习者应用该概念的练习。优先使用直接、自然的表达；首次出现陌生术语时予以定义，并区分事实与假设。修订时保留正确内容，只改善确有问题的段落。
