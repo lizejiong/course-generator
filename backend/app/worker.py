@@ -34,20 +34,14 @@ class Worker:
                 run = session.get(Run, job.run_id)
                 assert run is not None
                 jobs = JobService(session)
-                if outcome == "waiting_human":
+                if run.stop_requested or outcome == "stopped":
+                    run.status = "stopped"
+                    jobs.succeed(job)
+                elif run.pause_requested or outcome == "paused":
+                    run.status = "paused"
+                    jobs.succeed(job)
+                elif outcome == "waiting_human":
                     run.status = "waiting_human"
-                    jobs.succeed(job)
-                elif outcome == "paused":
-                    run.status = "paused"
-                    jobs.succeed(job)
-                elif outcome == "stopped":
-                    run.status = "stopped"
-                    jobs.succeed(job)
-                elif run.stop_requested:
-                    run.status = "stopped"
-                    jobs.succeed(job)
-                elif run.pause_requested:
-                    run.status = "paused"
                     jobs.succeed(job)
                 elif outcome == "completed":
                     run.status = "completed"

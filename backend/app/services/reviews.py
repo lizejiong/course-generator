@@ -49,7 +49,8 @@ class ReviewService:
         self.session.flush()
         if action == "stop":
             run.stop_requested = True
-            run.status = "stopped"
+            if run.status == "waiting_human":
+                run.status = "stopped"
         elif action in {"approve", "rework"}:
             run.status = "queued"
             self.jobs.enqueue(

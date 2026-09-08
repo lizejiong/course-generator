@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from app.db.models import Job, Run
 from app.services.jobs import JobService
+from app.worker import Worker
 
 
 class ClaimingSession:
@@ -51,3 +52,42 @@ def test_infrastructure_failure_enqueues_at_most_two_checkpoint_retries() -> Non
     session.job = final
     assert JobService(session).fail_infrastructure(final, "network", "permanent") is None  # type: ignore[arg-type]
     assert run.status == "failed"
+
+
+def test_worker_stop_request_wins_over_waiting_human_outcome() -> None:
+    run = Run(id=uuid4(), course_id=uuid4(), thread_id="thread", stop_requested=True)
+    job = Job(id=uuid4(), run_id=run.id, job_type="start", status="running", attempts=0)
+
+    class Transaction:
+        def __init__(self, session):
+            self.session = session
+
+        def __enter__(self):
+            return self.session
+
+        def __exit__(self, *args):
+            return None
+
+    class WorkerSession(ClaimingSession):
+        def __init__(self):
+            super().__init__(job, run)
+            self.calls = 0
+
+        def begin(self):
+            return Transaction(self)
+
+        def get(self, model, value):
+            return job if model is Job else run
+
+    class Factory:
+        def __init__(self, session):
+            self.session = session
+
+        def begin(self):
+            return Transaction(self.session)
+
+    session = WorkerSession()
+    worker = Worker(Factory(session), "worker", lambda _: "waiting_human")  # type: ignore[arg-type]
+    assert worker.run_once()
+    assert run.status == "stopped"
+    assert job.status == "succeeded"
