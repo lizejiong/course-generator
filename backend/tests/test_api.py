@@ -44,6 +44,17 @@ def test_course_run_and_safe_file_api(settings, db_session) -> None:
     run = client.post(f"/api/courses/{course_id}/runs", json={"token_limit": 500})
     assert run.status_code == 202
     assert run.json()["status"] == "queued"
+    assert run.json()["token_limit"] == 500
+    projection = client.get(f"/api/runs/{run.json()['id']}").json()
+    assert {
+        "node_summary",
+        "token_usage",
+        "token_ledger",
+        "pause_requested",
+        "stop_requested",
+        "error_code",
+        "error_summary",
+    } <= projection.keys()
     saved = client.put(
         f"/api/courses/{course_id}/files",
         params={"path": "workspace/MISSION.md"},

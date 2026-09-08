@@ -255,6 +255,14 @@ def run_view(run: Run) -> dict:
         "status": run.status,
         "stage": run.current_stage,
         "thread_id": run.thread_id,
+        "node_summary": run.node_summary,
+        "token_limit": run.token_limit,
+        "token_usage": run.token_usage,
+        "token_ledger": run.token_ledger,
+        "pause_requested": run.pause_requested,
+        "stop_requested": run.stop_requested,
+        "error_code": run.error_code,
+        "error_summary": run.error_summary,
         "updated_at": run.updated_at,
     }
 
