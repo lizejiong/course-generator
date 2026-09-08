@@ -1,9 +1,11 @@
+import json
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import ReviewEvent, Run
+from app.db.models import Course, ReviewEvent, Run
 from app.services.jobs import JobService
 
 
@@ -30,6 +32,8 @@ class ReviewService:
             raise ValueError("unsupported review action")
         if action == "approve" and (evidence or {}).get("unresolved_blocker"):
             raise ValueError("approval cannot waive a real blocker")
+        if action == "approve" and scope == "stage" and run.current_stage == 6:
+            self._require_course_quality_clear(run)
         if scope == "release" and (
             action != "approve" or run.current_stage != 7 or run.status != "waiting_human"
         ):
@@ -57,3 +61,14 @@ class ReviewService:
                 run, "publish" if scope == "release" and action == "approve" else "resume", event.id
             )
         return event
+
+    def _require_course_quality_clear(self, run: Run) -> None:
+        course = self.session.get(Course, run.course_id)
+        if course is None:
+            raise ValueError("course not found for stage-six review")
+        quality_path = Path(course.workspace_path) / "quality.json"
+        if not quality_path.is_file():
+            raise ValueError("stage-six quality report is required before approval")
+        report = json.loads(quality_path.read_text(encoding="utf-8"))
+        if report.get("has_blockers"):
+            raise ValueError("approval cannot waive a real blocker; submit rework instead")

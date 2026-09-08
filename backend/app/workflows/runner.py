@@ -407,10 +407,12 @@ class WorkflowRunner:
         minimum = int(self._definition(course).get("min_effective_chars_per_chapter", 1))
         chapter_results: list[dict] = []
         has_blockers = False
+        repair_targets: list[str] = []
         for chapter in batch["chapters"]:
             path = Path(course.workspace_path) / f"lessons/{chapter['number']:02d}-{course.slug}.md"
             if not path.is_file():
                 has_blockers = True
+                repair_targets.append(chapter["id"])
                 chapter_results.append(
                     {"chapter_id": chapter["id"], "missing_lesson": True, "gates": []}
                 )
@@ -420,13 +422,40 @@ class WorkflowRunner:
             chapter_results.append(
                 {"chapter_id": chapter["id"], "missing_lesson": False, "gates": [gate.as_dict()]}
             )
+            if not gate.passed:
+                repair_targets.append(chapter["id"])
+        repair_plan = None
+        if repair_targets:
+            repair_plan = {
+                "stage": 6,
+                "status": "needs_human_confirmation",
+                "root_cause": "course-wide audit found missing or invalid chapter content",
+                "target_chapters": repair_targets,
+                "execution_order": repair_targets,
+                "propagation_scope": "single_chapter",
+                "rerun_gates": ["deterministic", "language", "semantic"],
+                "closure": ["verified_pass", "human_evidence_invalidates_finding"],
+            }
+            self._write_json_artifact(
+                session,
+                course,
+                run,
+                "course_repair_plan",
+                "workspace/course-repair-plan.json",
+                repair_plan,
+            )
         self._write_json_artifact(
             session,
             course,
             run,
             "course_quality",
             "quality.json",
-            {"stage": 6, "has_blockers": has_blockers, "chapters": chapter_results},
+            {
+                "stage": 6,
+                "has_blockers": has_blockers,
+                "chapters": chapter_results,
+                "repair_plan": repair_plan,
+            },
         )
         return has_blockers
 

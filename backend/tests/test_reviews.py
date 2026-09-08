@@ -42,6 +42,29 @@ def test_approval_cannot_waive_a_real_blocker() -> None:
         )
 
 
+def test_stage_six_approval_requires_a_quality_report_without_blockers(tmp_path) -> None:
+    class StageSixSession(ReviewSession):
+        def __init__(self) -> None:
+            super().__init__()
+            self.course = type("Course", (), {"workspace_path": str(tmp_path)})()
+
+        def get(self, model, identifier):
+            return self.course
+
+    (tmp_path / "quality.json").write_text('{"has_blockers": true}', encoding="utf-8")
+    run = Run(
+        id=uuid4(),
+        course_id=uuid4(),
+        thread_id="stage-six",
+        status="waiting_human",
+        current_stage=6,
+    )
+    with pytest.raises(ValueError, match="cannot waive"):
+        ReviewService(StageSixSession()).decide(  # type: ignore[arg-type]
+            run, scope="stage", target="stage-6", action="approve"
+        )
+
+
 def test_release_approval_requires_waiting_stage_seven_candidate() -> None:
     session = ReviewSession()
     with pytest.raises(ValueError, match="stage-seven"):

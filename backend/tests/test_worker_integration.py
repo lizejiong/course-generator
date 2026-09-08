@@ -112,6 +112,8 @@ def test_batch_plan_has_parseable_context_scope_and_course_quality_detects_missi
     )
     run.current_stage = 6
     assert runner._write_course_quality(db_session, course, run)
+    repair_plan = settings.courses_root / "plan-course" / "workspace" / "course-repair-plan.json"
+    assert repair_plan.is_file()
 
 
 def test_worker_builds_then_publishes_final_release_after_human_event(settings, db_session) -> None:
