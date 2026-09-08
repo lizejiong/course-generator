@@ -58,3 +58,22 @@ def build_main_graph(nodes: dict[str, Node], checkpointer=None):
     graph.add_edge("course_quality", "release")
     graph.add_edge("release", END)
     return graph.compile(checkpointer=checkpointer)
+
+
+def build_stage_graph(nodes: dict[int, Node], checkpointer=None):
+    """Execute exactly one observable stage per Worker command.
+
+    The graph remains flat while a human approval is pending: a node finishes at
+    ``END`` and the next approved job invokes the graph with the same thread.
+    """
+    required = set(range(1, 8))
+    missing = required - nodes.keys()
+    if missing:
+        raise ValueError(f"缺少阶段节点：{', '.join(str(item) for item in sorted(missing))}")
+    graph = StateGraph(WorkflowState)
+    names = {stage: f"stage_{stage}" for stage in required}
+    for stage, name in names.items():
+        graph.add_node(name, nodes[stage])
+        graph.add_edge(name, END)
+    graph.add_conditional_edges(START, lambda state: state["stage"], names)
+    return graph.compile(checkpointer=checkpointer)

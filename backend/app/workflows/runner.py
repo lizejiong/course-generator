@@ -3,7 +3,6 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy.orm import Session, object_session
 
 from app.config import Settings
@@ -25,6 +24,7 @@ from app.services.quality import (
 from app.services.releases import ReleaseService
 from app.services.source_index import SourceIndexService
 from app.services.source_snapshots import SourceSnapshotService
+from app.workflows.graph import build_stage_graph
 
 
 class WorkflowRunner:
@@ -41,9 +41,12 @@ class WorkflowRunner:
         course = session.get(Course, run.course_id) if run else None
         if run is None or course is None:
             raise LookupError("run or course not found")
-        checkpoint_state = self._restore_checkpoint(run)
+        config = {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": ""}}
+        with postgres_checkpointer(self.settings) as checkpointer:
+            graph = build_stage_graph(self._stage_nodes(session, course, run, job), checkpointer)
+            checkpoint_state = dict(graph.get_state(config).values)
         if checkpoint_state:
-            run.current_stage = checkpoint_state["stage"]
+            run.current_stage = checkpoint_state.get("stage", run.current_stage)
         if job.job_type == "publish":
             event = session.get(ReviewEvent, job.input_event_id) if job.input_event_id else None
             release = self._release_path(course)
@@ -57,45 +60,52 @@ class WorkflowRunner:
         if (
             job.job_type == "resume"
             and job.input_event_id
-            and checkpoint_state.get("review_event_id") != str(job.input_event_id)
+            and checkpoint_state.get("pending_review_event_id") != str(job.input_event_id)
         ):
             self._apply_review_decision(session, run, job)
         if run.pause_requested:
             return "paused"
         if run.stop_requested:
             return "stopped"
-        outcome = self._execute_stage(session, course, run)
-        self._save_checkpoint(run, str(job.input_event_id) if job.input_event_id else None)
-        return outcome
+        outcome: list[str] = []
 
-    def _restore_checkpoint(self, run: Run) -> dict:
-        config = {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": "course_generator"}}
-        with postgres_checkpointer(self.settings) as checkpointer:
-            checkpoint = checkpointer.get_tuple(config)
-        if checkpoint is None:
-            return {}
-        state = checkpoint.checkpoint["channel_values"].get("workflow_state", {})
-        return state if isinstance(state, dict) else {}
+        def execute_stage(state: dict) -> dict:
+            outcome.append(self._execute_stage(session, course, run))
+            return {
+                **state,
+                "course_id": str(course.id),
+                "run_id": str(run.id),
+                "stage": run.current_stage,
+                "pending_review_event_id": str(job.input_event_id) if job.input_event_id else None,
+                "last_error_code": run.error_code,
+            }
 
-    def _save_checkpoint(self, run: Run, review_event_id: str | None) -> None:
-        state = {
-            "course_id": str(run.course_id),
-            "run_id": str(run.id),
-            "stage": run.current_stage,
-            "review_event_id": review_event_id,
-            "node_summary": run.node_summary,
-        }
-        checkpoint = empty_checkpoint()
-        checkpoint["channel_values"] = {"workflow_state": state}
-        checkpoint["channel_versions"] = {"workflow_state": checkpoint["id"]}
-        config = {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": "course_generator"}}
         with postgres_checkpointer(self.settings) as checkpointer:
-            checkpointer.put(
+            graph = build_stage_graph({stage: execute_stage for stage in range(1, 8)}, checkpointer)
+            graph.invoke(
+                {
+                    "course_id": str(course.id),
+                    "run_id": str(run.id),
+                    "stage": run.current_stage,
+                    "batch_id": checkpoint_state.get("batch_id"),
+                    "chapter_id": checkpoint_state.get("chapter_id"),
+                    "round_no": checkpoint_state.get("round_no", 0),
+                    "artifact_refs": checkpoint_state.get("artifact_refs", {}),
+                    "gate_result_refs": checkpoint_state.get("gate_result_refs", []),
+                    "pending_review_event_id": str(job.input_event_id)
+                    if job.input_event_id
+                    else None,
+                    "last_error_code": run.error_code,
+                },
                 config,
-                checkpoint,
-                {"source": "loop", "step": run.current_stage, "writes": {"workflow_state": state}},
-                {"workflow_state": checkpoint["id"]},
             )
+        return outcome[0]
+
+    @staticmethod
+    def _stage_nodes(session: Session, course: Course, run: Run, job: Job) -> dict[int, callable]:
+        # Nodes are replaced by the per-command closure immediately before invoke;
+        # this first compilation is only used to restore durable graph state.
+        return {stage: lambda state: state for stage in range(1, 8)}
 
     def _apply_review_decision(self, session: Session, run: Run, job: Job) -> None:
         event = session.get(ReviewEvent, job.input_event_id) if job.input_event_id else None

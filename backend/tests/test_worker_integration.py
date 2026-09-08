@@ -33,10 +33,10 @@ def test_worker_persists_stage_artifact_waits_for_human_then_resumes(settings, d
     assert worker.run_once()
     with postgres_checkpointer(settings) as checkpointer:
         checkpoint = checkpointer.get_tuple(
-            {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": "course_generator"}}
+            {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": ""}}
         )
         assert checkpoint is not None
-        assert checkpoint.checkpoint["channel_values"]["workflow_state"]["stage"] == 1
+        assert checkpoint.checkpoint["channel_values"]["stage"] == 1
     with factory.begin() as session:
         persisted = session.get(Run, run.id)
         assert persisted and persisted.status == "waiting_human"
