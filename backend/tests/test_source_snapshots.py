@@ -23,6 +23,13 @@ def test_pasted_sources_become_hashed_artifacts_without_network(tmp_path: Path) 
     assert (
         workspace / "workspace" / "source-snapshots" / f"{snapshots[0]['sha256']}.txt"
     ).is_file()
+    duplicate = service.capture(
+        course,
+        uuid4(),
+        [{"name": "first", "text": "same"}, {"name": "second", "text": "same"}],
+        "internal_only",
+    )
+    assert len(duplicate) == 1
 
 
 def test_internal_only_policy_rejects_url_fetching(tmp_path: Path) -> None:

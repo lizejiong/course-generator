@@ -11,6 +11,7 @@ from app.db.models import Course, Job, ReviewEvent, Run
 from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.context_packs import ContextPackInput, ContextPackService
 from app.services.courses import CourseService
+from app.services.discovery import TavilyDiscovery
 from app.services.models import ModelGateway, TokenBudgetPause
 from app.services.quality import (
     Finding,
@@ -185,11 +186,19 @@ class WorkflowRunner:
             {"id": f"chapter-{number}", "number": number, "title": f"Chapter {number}"}
             for number in range(1, count + 1)
         ]
+        resources = list(definition.get("resources", []))
+        source_policy = definition.get("source_policy", "internal_only")
+        if source_policy != "internal_only":
+            resources.extend(
+                TavilyDiscovery(self.settings.tavily_api_key).discover(
+                    f"{definition['title']} {definition['content_scope']}"
+                )
+            )
         snapshots = SourceSnapshotService(session).capture(
             course,
             run.id,
-            definition.get("resources", []),
-            definition.get("source_policy", "user_and_official"),
+            resources,
+            source_policy,
         )
         resource_markdown = "# Resources\n\n" + "\n".join(
             f"- {snapshot['origin']} ({snapshot['sha256']})" for snapshot in snapshots

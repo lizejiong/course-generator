@@ -25,6 +25,7 @@ class SourceSnapshotService:
         source_policy: str,
     ) -> list[dict]:
         snapshots: list[dict] = []
+        seen_hashes: set[str] = set()
         for index, resource in enumerate(resources, start=1):
             if isinstance(resource, str) and resource.startswith(("http://", "https://")):
                 if source_policy == "internal_only":
@@ -41,6 +42,9 @@ class SourceSnapshotService:
                     else f"pasted-{index}"
                 )
                 digest = hashlib.sha256(content.encode()).hexdigest()
+            if digest in seen_hashes:
+                continue
+            seen_hashes.add(digest)
             artifact = self.artifacts.write(
                 course,
                 ArtifactWrite(
