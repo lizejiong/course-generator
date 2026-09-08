@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, object_session
 from app.config import Settings
 from app.db.checkpoints import postgres_checkpointer
 from app.db.models import Course, Job, ReviewEvent, Run
-from app.prompts import render_prompt
+from app.prompts import RenderedPrompt, render_prompt
 from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.context_packs import ContextPackInput, ContextPackService
 from app.services.courses import CourseService
@@ -275,28 +275,25 @@ class WorkflowRunner:
                 context_id=context_id,
                 repair_evidence="; ".join(evidence),
             )
-            draft = gateway.complete(
+            draft_content, artifact = self._cached_model_output(
+                session,
+                course,
                 run,
+                gateway,
                 node="chapter_write",
                 operation="draft_chapter",
-                prompt=prompt.content,
-                prompt_name=prompt.name,
-                prompt_hash=prompt.content_hash,
-                skill_name=prompt.skill_name,
-                skill_hash=prompt.skill_hash,
+                prompt=prompt,
+                logical_path=path,
+                round_no=round_no,
             )
-            artifact = self._write_artifact(
-                session, course, run, "chapter_write", path, draft.content.encode(), round_no
-            )
-            precheck = deterministic_gate(draft.content, artifact.revision, minimum)
+            precheck = deterministic_gate(draft_content, artifact.revision, minimum)
             if not precheck.passed:
                 self._write_quality_evidence(session, course, run, chapter, round_no, [precheck])
                 evidence = [finding.message for finding in precheck.findings]
                 prior_fingerprints.extend(finding.fingerprint for finding in precheck.findings)
                 continue
-            humanized = self._humanize(gateway, run, draft.content)
-            human_artifact = self._write_artifact(
-                session, course, run, "humanizer", path, humanized["markdown"].encode(), round_no
+            humanized, human_artifact = self._humanize(
+                session, course, run, gateway, draft_content, path, round_no
             )
             regression = deterministic_gate(humanized["markdown"], human_artifact.revision, minimum)
             language = language_gate(
@@ -306,7 +303,14 @@ class WorkflowRunner:
                 humanized["findings"],
             )
             semantic = self._semantic_review(
-                gateway, run, humanized["markdown"], human_artifact.revision
+                session,
+                course,
+                run,
+                gateway,
+                chapter["id"],
+                round_no,
+                humanized["markdown"],
+                human_artifact.revision,
             )
             results = [regression, language, semantic]
             self._write_quality_evidence(session, course, run, chapter, round_no, results)
@@ -324,47 +328,115 @@ class WorkflowRunner:
                 return False
         return False
 
-    def _humanize(self, gateway, run, markdown: str) -> dict:
+    def _humanize(self, session, course, run, gateway, markdown: str, path: str, round_no: int):
         prompt = render_prompt(
             "natural_language_editor", skill="natural-language-editor", markdown=markdown
         )
-        result = gateway.complete(
+        content, artifact = self._cached_model_output(
+            session,
+            course,
             run,
+            gateway,
             node="humanizer",
             operation="humanize_chapter",
-            prompt=prompt.content,
-            prompt_name=prompt.name,
-            prompt_hash=prompt.content_hash,
-            skill_name=prompt.skill_name,
-            skill_hash=prompt.skill_hash,
+            prompt=prompt,
+            logical_path=path,
+            round_no=round_no,
         )
-        payload = self._model_json(result.content)
-        return {
-            "markdown": str(payload["markdown"]),
-            "scores": {
-                name: int(payload["scores"][name])
-                for name in ("naturalness", "clarity", "conciseness", "teaching")
+        payload = self._model_json(content)
+        return (
+            {
+                "markdown": str(payload["markdown"]),
+                "scores": {
+                    name: int(payload["scores"][name])
+                    for name in ("naturalness", "clarity", "conciseness", "teaching")
+                },
+                "findings": self._findings(payload.get("findings", [])),
             },
-            "findings": self._findings(payload.get("findings", [])),
-        }
+            artifact,
+        )
 
-    def _semantic_review(self, gateway, run, markdown: str, revision: int):
+    def _semantic_review(
+        self,
+        session,
+        course,
+        run,
+        gateway,
+        chapter_id: str,
+        round_no: int,
+        markdown: str,
+        revision: int,
+    ):
         prompt = render_prompt("semantic_reviewer", markdown=markdown)
-        result = gateway.complete(
+        content, _ = self._cached_model_output(
+            session,
+            course,
             run,
+            gateway,
             node="semantic_review",
             operation="review_chapter_semantics",
-            prompt=prompt.content,
-            prompt_name=prompt.name,
-            prompt_hash=prompt.content_hash,
+            prompt=prompt,
+            logical_path=f"workspace/quality/{chapter_id}-round-{round_no}-semantic.json",
+            round_no=round_no,
         )
-        payload = self._model_json(result.content)
+        payload = self._model_json(content)
         outcomes = {
             name: payload["outcomes"][name]
             for name in ("facts_sources", "goals_scope", "teaching", "logic_continuity")
         }
         return semantic_gate(
             markdown, revision, outcomes, self._findings(payload.get("findings", []))
+        )
+
+    def _cached_model_output(
+        self,
+        session: Session,
+        course: Course,
+        run: Run,
+        gateway,
+        *,
+        node: str,
+        operation: str,
+        prompt: RenderedPrompt,
+        logical_path: str,
+        round_no: int,
+    ):
+        request = ArtifactWrite(
+            course_id=course.id,
+            run_id=run.id,
+            node_name=node,
+            scope=f"stage-{run.current_stage}:{logical_path}",
+            round_no=round_no,
+            input_hash=hashlib.sha256(prompt.content.encode()).hexdigest(),
+            logical_path=logical_path,
+            content=b"",
+        )
+        artifacts = ArtifactService(session)
+        existing = artifacts.recover(course, request)
+        if existing is not None:
+            return Path(existing.storage_path).read_text(encoding="utf-8"), existing
+        result = gateway.complete(
+            run,
+            node=node,
+            operation=operation,
+            prompt=prompt.content,
+            prompt_name=prompt.name,
+            prompt_hash=prompt.content_hash,
+            skill_name=prompt.skill_name,
+            skill_hash=prompt.skill_hash,
+        )
+        return result.content, artifacts.write(
+            course,
+            ArtifactWrite(
+                course_id=request.course_id,
+                run_id=request.run_id,
+                node_name=request.node_name,
+                scope=request.scope,
+                round_no=request.round_no,
+                input_hash=request.input_hash,
+                logical_path=request.logical_path,
+                content=result.content.encode(),
+            ),
         )
 
     @staticmethod

@@ -71,6 +71,16 @@ class ScriptedGateway:
         return ModelResult(next(self.responses), 1, 1, "test-model")
 
 
+class CountingGateway(ScriptedGateway):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    def complete(self, *args, **kwargs) -> ModelResult:
+        self.calls += 1
+        return super().complete(*args, **kwargs)
+
+
 def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) -> None:
     course = CourseService(db_session, settings.courses_root).create(
         "quality-course", {"min_effective_chars_per_chapter": 1}
@@ -91,6 +101,39 @@ def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) ->
     assert passed
     evidence = settings.courses_root / "quality-course" / "workspace" / "quality"
     assert (evidence / "chapter-1-round-1.json").is_file()
+
+
+def test_chapter_cycle_reuses_durable_model_outputs_after_a_retry(settings, db_session) -> None:
+    course = CourseService(db_session, settings.courses_root).create(
+        "cached-quality-course", {"min_effective_chars_per_chapter": 1}
+    )
+    run = Run(course_id=course.id, thread_id=str(uuid4()), current_stage=5)
+    db_session.add(run)
+    db_session.flush()
+    runner = WorkflowRunner(settings)
+    gateway = CountingGateway()
+    chapter = {"id": "chapter-1", "title": "Chapter", "number": 1}
+    context_id = uuid4()
+    assert runner._chapter_quality_cycle(
+        db_session,
+        course,
+        run,
+        gateway,
+        chapter,
+        context_id,
+        "lessons/01-cached-quality-course.md",
+    )
+    assert gateway.calls == 3
+    assert runner._chapter_quality_cycle(
+        db_session,
+        course,
+        run,
+        gateway,
+        chapter,
+        context_id,
+        "lessons/01-cached-quality-course.md",
+    )
+    assert gateway.calls == 3
 
 
 def test_batch_plan_has_parseable_context_scope_and_course_quality_detects_missing_lessons(
