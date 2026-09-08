@@ -16,6 +16,10 @@ class ModelResult:
     model: str
 
 
+class TokenBudgetPause(RuntimeError):
+    """The next model call is not allowed to exceed the user-owned run budget."""
+
+
 class ModelGateway:
     """The sole OpenAI-compatible SDK boundary; prompts are never persisted."""
 
@@ -33,6 +37,12 @@ class ModelGateway:
         prompt_hash: str,
         model_override: str | None = None,
     ) -> ModelResult:
+        estimated_next_call = max(256, len(prompt.encode("utf-8")) // 4)
+        if run.token_limit and run.token_usage + estimated_next_call > run.token_limit:
+            run.pause_requested = True
+            run.error_code = "token_budget_pause"
+            run.error_summary = "the next model call may exceed the configured token budget"
+            raise TokenBudgetPause(run.error_summary)
         if not self.settings.openai_api_key:
             raise RuntimeError("OPENAI_API_KEY is required for model execution")
         model = model_override or self.settings.openai_model
@@ -59,6 +69,12 @@ class ModelGateway:
         }
         run.token_ledger = [*run.token_ledger, ledger_entry]
         run.token_usage += (usage.total_tokens if usage else 0) or 0
+        if run.token_limit and run.token_usage >= run.token_limit:
+            run.pause_requested = True
+            run.error_code = "token_budget_exhausted"
+            run.error_summary = "the configured token budget has been exhausted"
+        elif run.token_limit and run.token_usage >= int(run.token_limit * 0.8):
+            run.node_summary = "token budget is at or above 80%; review the remaining budget"
         return ModelResult(
             content, ledger_entry["input_tokens"], ledger_entry["output_tokens"], model
         )

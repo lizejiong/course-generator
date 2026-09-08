@@ -11,7 +11,7 @@ from app.db.models import Course, Job, ReviewEvent, Run
 from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.context_packs import ContextPackInput, ContextPackService
 from app.services.courses import CourseService
-from app.services.models import ModelGateway
+from app.services.models import ModelGateway, TokenBudgetPause
 from app.services.quality import (
     Finding,
     deterministic_gate,
@@ -130,8 +130,11 @@ class WorkflowRunner:
                 run.error_code = "model_not_configured"
                 run.error_summary = "OPENAI_API_KEY is required before chapter production"
                 return "paused"
-            if not self._produce_chapters(session, course, run):
-                return "waiting_human"
+            try:
+                if not self._produce_chapters(session, course, run):
+                    return "waiting_human"
+            except TokenBudgetPause:
+                return "paused"
             run.node_summary = "batch production completed; quality evidence awaits approval"
         elif stage == 6:
             blockers = self._write_course_quality(session, course, run)
