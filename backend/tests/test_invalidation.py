@@ -39,6 +39,26 @@ def test_edit_invalidates_downstream_artifacts_and_enqueues_resume(db_session) -
                 input_hash="b" * 64,
                 producer_node="chapter_write",
             ),
+            Artifact(
+                operation_id="c" * 64,
+                course_id=course.id,
+                logical_path="workspace/source-index.json",
+                storage_path="/tmp/c",
+                revision=1,
+                sha256="c" * 64,
+                input_hash="c" * 64,
+                producer_node="source_index",
+            ),
+            Artifact(
+                operation_id="d" * 64,
+                course_id=course.id,
+                logical_path="workspace/source-snapshots/d.txt",
+                storage_path="/tmp/d",
+                revision=1,
+                sha256="d" * 64,
+                input_hash="d" * 64,
+                producer_node="source_snapshot",
+            ),
         ]
     )
     db_session.flush()

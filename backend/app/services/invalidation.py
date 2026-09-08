@@ -31,6 +31,8 @@ class InvalidationService:
             "requirements": 1,
             "task_definition": 2,
             "sources": 3,
+            "source_snapshot": 3,
+            "source_index": 3,
             "blueprint": 3,
             "batch_plan": 4,
             "context_pack": 5,
@@ -39,6 +41,7 @@ class InvalidationService:
             "semantic_review": 5,
             "quality_evidence": 5,
             "course_quality": 6,
+            "course_repair_plan": 6,
             "release": 7,
         }
         artifacts = self.session.scalars(
