@@ -8,6 +8,33 @@
 
 项目目前完成 V1 产品需求、交互原型和技术设计，下一步开始实现后端。
 
+## 后端开发
+
+后端位于 `backend/`，使用 Python 3.12、FastAPI、PostgreSQL 和独立同步 Worker。前端不是此阶段的前置条件。
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d postgres
+uv sync --group dev
+uv run alembic upgrade head
+uv run uvicorn app.main:app --app-dir backend --reload
+```
+
+另开终端运行 Worker：
+
+```powershell
+uv run python -m app.worker_main
+```
+
+Windows 本机若 5432 已被占用，Compose 默认将项目 PostgreSQL 映射到 5433；`.env.example` 已使用相同连接地址。
+
+验证：
+
+```powershell
+uv run pytest backend/tests -q --basetemp=work/pytest-verify
+uv run ruff check backend
+```
+
 ## 文档
 
 - [产品需求文档](outputs/course-agent-prd-v0.2.md)
