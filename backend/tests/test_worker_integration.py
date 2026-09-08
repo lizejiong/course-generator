@@ -137,3 +137,53 @@ def test_worker_builds_then_publishes_final_release_after_human_event(settings, 
     with factory.begin() as session:
         persisted = session.get(Run, run.id)
         assert persisted and persisted.status == "completed"
+
+
+def test_worker_completes_all_seven_stages_with_human_approvals(
+    settings, db_session, monkeypatch
+) -> None:
+    course = CourseService(db_session, settings.courses_root).create(
+        "full-worker",
+        {
+            "title": "Full Worker Course",
+            "audience": "learners",
+            "learning_goals": ["complete a durable course run"],
+            "expected_chapter_count": 1,
+            "min_effective_chars_per_chapter": 1,
+        },
+    )
+    run = Run(course_id=course.id, thread_id=str(uuid4()))
+    db_session.add(run)
+    db_session.flush()
+    JobService(db_session).enqueue(run, "start")
+    db_session.commit()
+    settings.openai_api_key = "test-key"
+    monkeypatch.setattr("app.workflows.runner.ModelGateway", lambda settings: ScriptedGateway())
+    factory = sessionmaker(db_session.bind, expire_on_commit=False)
+    worker = Worker(factory, "full-worker-test", WorkflowRunner(settings).execute)
+
+    for expected_stage in range(1, 7):
+        assert worker.run_once()
+        with factory.begin() as session:
+            persisted = session.get(Run, run.id)
+            assert persisted and persisted.status == "waiting_human"
+            assert persisted.current_stage == expected_stage
+            ReviewService(session).decide(
+                persisted,
+                scope="stage",
+                target=f"stage-{expected_stage}",
+                action="approve",
+            )
+
+    assert worker.run_once()
+    with factory.begin() as session:
+        persisted = session.get(Run, run.id)
+        assert persisted and persisted.status == "waiting_human"
+        assert persisted.current_stage == 7
+        assert (settings.releases_root / "full-worker" / "r0001" / "release.json").is_file()
+        ReviewService(session).decide(persisted, scope="release", target="r0001", action="approve")
+
+    assert worker.run_once()
+    with factory.begin() as session:
+        persisted = session.get(Run, run.id)
+        assert persisted and persisted.status == "completed"

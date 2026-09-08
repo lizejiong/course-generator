@@ -85,14 +85,14 @@ class WorkflowRunner:
         }
         checkpoint = empty_checkpoint()
         checkpoint["channel_values"] = {"workflow_state": state}
-        checkpoint["channel_versions"] = {"workflow_state": 1}
+        checkpoint["channel_versions"] = {"workflow_state": checkpoint["id"]}
         config = {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": "course_generator"}}
         with postgres_checkpointer(self.settings) as checkpointer:
             checkpointer.put(
                 config,
                 checkpoint,
                 {"source": "loop", "step": run.current_stage, "writes": {"workflow_state": state}},
-                {"workflow_state": 1},
+                {"workflow_state": checkpoint["id"]},
             )
 
     def _apply_review_decision(self, session: Session, run: Run, job: Job) -> None:
