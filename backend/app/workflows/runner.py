@@ -18,6 +18,7 @@ from app.services.quality import (
     semantic_gate,
 )
 from app.services.releases import ReleaseService
+from app.services.source_snapshots import SourceSnapshotService
 
 
 class WorkflowRunner:
@@ -138,8 +139,15 @@ class WorkflowRunner:
             {"id": f"chapter-{number}", "number": number, "title": f"Chapter {number}"}
             for number in range(1, count + 1)
         ]
-        resources = definition.get("resources", [])
-        resource_markdown = "# Resources\n\n" + "\n".join(f"- {resource}" for resource in resources)
+        snapshots = SourceSnapshotService(session).capture(
+            course,
+            run.id,
+            definition.get("resources", []),
+            definition.get("source_policy", "user_and_official"),
+        )
+        resource_markdown = "# Resources\n\n" + "\n".join(
+            f"- {snapshot['origin']} ({snapshot['sha256']})" for snapshot in snapshots
+        )
         blueprint_markdown = "# Course Blueprint\n\n" + "\n".join(
             f"## {chapter['title']}\n\n- Chapter ID: {chapter['id']}" for chapter in chapters
         )
