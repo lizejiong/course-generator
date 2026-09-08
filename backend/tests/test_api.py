@@ -24,6 +24,15 @@ def test_course_run_and_safe_file_api(settings, db_session) -> None:
     )
     assert created.status_code == 201
     course_id = created.json()["id"]
+    initial_artifacts = client.get(f"/api/courses/{course_id}/artifacts").json()
+    assert initial_artifacts[0]["path"] == "course.json"
+    patched = client.patch(
+        f"/api/courses/{course_id}",
+        json={"definition": {"title": "Updated", "learning_goals": ["test"]}},
+    )
+    assert patched.status_code == 200
+    revisions = client.get(f"/api/courses/{course_id}/artifacts").json()
+    assert [item["revision"] for item in revisions if item["path"] == "course.json"] == [1, 2]
     run = client.post(f"/api/courses/{course_id}/runs", json={"token_limit": 500})
     assert run.status_code == 202
     assert run.json()["status"] == "queued"

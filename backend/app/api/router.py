@@ -33,8 +33,21 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
     @router.post("/courses", status_code=status.HTTP_201_CREATED)
     def create_course(payload: CourseCreate, db: Session = Depends(session)):
         try:
-            course = CourseService(db, settings.courses_root).create(
-                payload.slug, payload.definition
+            courses = CourseService(db, settings.courses_root)
+            course = courses.create(payload.slug, payload.definition)
+            content = json.dumps(payload.definition, ensure_ascii=False, indent=2).encode()
+            ArtifactService(db).write(
+                course,
+                ArtifactWrite(
+                    course_id=course.id,
+                    run_id=None,
+                    node_name="course_create",
+                    scope="course.json",
+                    round_no=0,
+                    input_hash=hashlib.sha256(content).hexdigest(),
+                    logical_path="course.json",
+                    content=content,
+                ),
             )
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
@@ -56,8 +69,26 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
     @router.patch("/courses/{course_id}")
     def patch_course(course_id: UUID, payload: CoursePatch, db: Session = Depends(session)):
         course = course_or_404(db, course_id)
+        previous = CourseService(db, settings.courses_root).read_definition(course)
         InvalidationService(db).invalidate(course, "course.json")
-        CourseService(db, settings.courses_root).update_definition(course, payload.definition)
+        content = json.dumps(payload.definition, ensure_ascii=False, indent=2).encode()
+        ArtifactService(db).write(
+            course,
+            ArtifactWrite(
+                course_id=course.id,
+                run_id=None,
+                node_name="manual_edit",
+                scope="course.json",
+                round_no=0,
+                input_hash=hashlib.sha256(
+                    json.dumps(previous, ensure_ascii=False, sort_keys=True).encode()
+                    + b"\0"
+                    + content
+                ).hexdigest(),
+                logical_path="course.json",
+                content=content,
+            ),
+        )
         return course_view(course, payload.definition)
 
     @router.post("/courses/{course_id}/archive")
