@@ -176,6 +176,34 @@ def test_chapter_cycle_repairs_one_invalid_structured_model_output(settings, db_
     assert gateway.calls == 4
 
 
+def test_stage_three_source_fragments_are_injected_into_stage_five_context_pack(
+    settings, db_session, monkeypatch
+) -> None:
+    course = CourseService(db_session, settings.courses_root).create(
+        "source-context-course",
+        {
+            "title": "来源课程",
+            "content_scope": "测试来源传递",
+            "expected_chapter_count": 1,
+            "min_effective_chars_per_chapter": 1,
+            "source_policy": "internal_only",
+            "resources": [{"name": "内部笔记", "text": "可追溯的来源证据。"}],
+        },
+    )
+    run = Run(course_id=course.id, thread_id=str(uuid4()), current_stage=3)
+    db_session.add(run)
+    db_session.flush()
+    runner = WorkflowRunner(settings)
+    runner._write_blueprint(db_session, course, run)
+    run.current_stage = 4
+    runner._write_batches(db_session, course, run)
+    run.current_stage = 5
+    monkeypatch.setattr("app.workflows.runner.ModelGateway", lambda settings: ScriptedGateway())
+    assert runner._produce_chapters(db_session, course, run)
+    context = runner._workspace_json(course, "workspace/context-packs/batch-01/chapter-01.json")
+    assert context["source_fragments"][0]["text"] == "可追溯的来源证据。"
+
+
 def test_batch_plan_has_parseable_context_scope_and_course_quality_detects_missing_lessons(
     settings, db_session
 ) -> None:
