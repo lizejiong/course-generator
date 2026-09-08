@@ -50,8 +50,10 @@ class WorkflowRunner:
             ReleaseService(self.settings.releases_root).promote(release)
             run.node_summary = "release promoted by an append-only review event"
             return "completed"
-        if job.job_type == "resume" and checkpoint_state.get("review_event_id") != str(
-            job.input_event_id
+        if (
+            job.job_type == "resume"
+            and job.input_event_id
+            and checkpoint_state.get("review_event_id") != str(job.input_event_id)
         ):
             self._apply_review_decision(session, run, job)
         if run.pause_requested:

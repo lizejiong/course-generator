@@ -12,6 +12,7 @@ from app.db.models import Artifact, Course, ReviewEvent, Run
 from app.schemas.api import CourseCreate, CoursePatch, FileWrite, ReviewDecision, RunCreate
 from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.courses import CourseService
+from app.services.invalidation import InvalidationService
 from app.services.jobs import JobService
 from app.services.reviews import ReviewService
 
@@ -55,6 +56,7 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
     @router.patch("/courses/{course_id}")
     def patch_course(course_id: UUID, payload: CoursePatch, db: Session = Depends(session)):
         course = course_or_404(db, course_id)
+        InvalidationService(db).invalidate(course, "course.json")
         CourseService(db, settings.courses_root).update_definition(course, payload.definition)
         return course_view(course, payload.definition)
 
@@ -142,6 +144,7 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
             raise HTTPException(status_code=422, detail=str(error)) from error
         previous = target.read_bytes() if target.exists() else b""
         content = payload.content.encode("utf-8")
+        InvalidationService(db).invalidate(course, path)
         artifact = ArtifactService(db).write(
             course,
             ArtifactWrite(
