@@ -23,6 +23,7 @@ from app.services.quality import (
     semantic_gate,
 )
 from app.services.releases import ReleaseService
+from app.services.source_index import SourceIndexService
 from app.services.source_snapshots import SourceSnapshotService
 
 
@@ -202,11 +203,27 @@ class WorkflowRunner:
             resources,
             source_policy,
         )
+        source_index = SourceIndexService().build(course, snapshots, chapters)
+        self._write_json_artifact(
+            session,
+            course,
+            run,
+            "source_index",
+            "workspace/source-index.json",
+            source_index,
+        )
         resource_markdown = "# 来源登记\n\n" + "\n".join(
             f"- {snapshot['origin']} ({snapshot['sha256']})" for snapshot in snapshots
         )
         blueprint_markdown = "# 课程蓝图\n\n" + "\n".join(
-            f"## {chapter['title']}\n\n- 章节 ID：{chapter['id']}" for chapter in chapters
+            "\n".join(
+                [
+                    f"## {chapter['title']}",
+                    f"\n- 章节 ID：{chapter['id']}",
+                    "- 来源片段：" + ", ".join(source_index["chapter_fragment_ids"][chapter["id"]]),
+                ]
+            )
+            for chapter in chapters
         )
         self._write_artifact(
             session, course, run, "sources", "workspace/RESOURCES.md", resource_markdown.encode()
@@ -221,6 +238,10 @@ class WorkflowRunner:
             {"id": f"chapter-{number}", "number": number, "title": f"Chapter {number}"}
             for number in range(1, int(definition.get("expected_chapter_count", 1)) + 1)
         ]
+        index_path = Path(course.workspace_path) / "workspace/source-index.json"
+        source_index = (
+            json.loads(index_path.read_text(encoding="utf-8")) if index_path.is_file() else {}
+        )
         batch = {
             "batch_id": "batch-01",
             "chapters": chapters,
@@ -228,7 +249,9 @@ class WorkflowRunner:
                 {
                     "chapter_id": chapter["id"],
                     "blueprint_ref": f"workspace/BLUEPRINT.md#{chapter['id']}",
-                    "source_refs": [],
+                    "source_refs": source_index.get("chapter_fragment_ids", {}).get(
+                        chapter["id"], []
+                    ),
                 }
                 for chapter in chapters
             ],
@@ -241,6 +264,7 @@ class WorkflowRunner:
 
     def _produce_chapters(self, session: Session, course: Course, run: Run) -> bool:
         batch = self._workspace_json(course, "workspace/batches/batch-01.json")
+        source_index = self._workspace_json(course, "workspace/source-index.json")
         gateway = ModelGateway(self.settings)
         for chapter in batch["chapters"]:
             pack = ContextPackInput(
@@ -249,7 +273,7 @@ class WorkflowRunner:
                 chapter_id=chapter["id"],
                 chapter_goal=chapter["title"],
                 blueprint=chapter,
-                source_fragments=[],
+                source_fragments=SourceIndexService.fragments_for(source_index, chapter["id"]),
                 prior_summary=None,
                 terms=[],
                 writing_constraints=["include a clear explanation, example, and exercise"],
