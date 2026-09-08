@@ -2,9 +2,11 @@ import hashlib
 import json
 from pathlib import Path
 
+from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy.orm import Session, object_session
 
 from app.config import Settings
+from app.db.checkpoints import postgres_checkpointer
 from app.db.models import Course, Job, ReviewEvent, Run
 from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.context_packs import ContextPackInput, ContextPackService
@@ -35,17 +37,53 @@ class WorkflowRunner:
         course = session.get(Course, run.course_id) if run else None
         if run is None or course is None:
             raise LookupError("run or course not found")
+        checkpoint_state = self._restore_checkpoint(run)
+        if checkpoint_state:
+            run.current_stage = checkpoint_state["stage"]
         if job.job_type == "publish":
             ReleaseService(self.settings.releases_root).promote(self._release_path(course))
             run.node_summary = "release promoted by an append-only review event"
             return "completed"
-        if job.job_type == "resume":
+        if job.job_type == "resume" and checkpoint_state.get("review_event_id") != str(
+            job.input_event_id
+        ):
             self._apply_review_decision(session, run, job)
         if run.pause_requested:
             return "paused"
         if run.stop_requested:
             return "stopped"
-        return self._execute_stage(session, course, run)
+        outcome = self._execute_stage(session, course, run)
+        self._save_checkpoint(run, str(job.input_event_id) if job.input_event_id else None)
+        return outcome
+
+    def _restore_checkpoint(self, run: Run) -> dict:
+        config = {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": "course_generator"}}
+        with postgres_checkpointer(self.settings) as checkpointer:
+            checkpoint = checkpointer.get_tuple(config)
+        if checkpoint is None:
+            return {}
+        state = checkpoint.checkpoint["channel_values"].get("workflow_state", {})
+        return state if isinstance(state, dict) else {}
+
+    def _save_checkpoint(self, run: Run, review_event_id: str | None) -> None:
+        state = {
+            "course_id": str(run.course_id),
+            "run_id": str(run.id),
+            "stage": run.current_stage,
+            "review_event_id": review_event_id,
+            "node_summary": run.node_summary,
+        }
+        checkpoint = empty_checkpoint()
+        checkpoint["channel_values"] = {"workflow_state": state}
+        checkpoint["channel_versions"] = {"workflow_state": 1}
+        config = {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": "course_generator"}}
+        with postgres_checkpointer(self.settings) as checkpointer:
+            checkpointer.put(
+                config,
+                checkpoint,
+                {"source": "loop", "step": run.current_stage, "writes": {"workflow_state": state}},
+                {"workflow_state": 1},
+            )
 
     def _apply_review_decision(self, session: Session, run: Run, job: Job) -> None:
         event = session.get(ReviewEvent, job.input_event_id) if job.input_event_id else None

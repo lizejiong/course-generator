@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import sessionmaker
 
+from app.db.checkpoints import postgres_checkpointer
 from app.db.models import Run
 from app.services.courses import CourseService
 from app.services.jobs import JobService
@@ -30,6 +31,12 @@ def test_worker_persists_stage_artifact_waits_for_human_then_resumes(settings, d
     worker = Worker(factory, "test-worker", WorkflowRunner(settings).execute)
 
     assert worker.run_once()
+    with postgres_checkpointer(settings) as checkpointer:
+        checkpoint = checkpointer.get_tuple(
+            {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": "course_generator"}}
+        )
+        assert checkpoint is not None
+        assert checkpoint.checkpoint["channel_values"]["workflow_state"]["stage"] == 1
     with factory.begin() as session:
         persisted = session.get(Run, run.id)
         assert persisted and persisted.status == "waiting_human"
