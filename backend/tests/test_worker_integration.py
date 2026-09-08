@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db.models import Run
 from app.services.courses import CourseService
 from app.services.jobs import JobService
+from app.services.models import ModelResult
 from app.services.reviews import ReviewService
 from app.worker import Worker
 from app.workflows.runner import WorkflowRunner
@@ -44,3 +45,42 @@ def test_worker_persists_stage_artifact_waits_for_human_then_resumes(settings, d
         root = settings.courses_root / "worker-course" / "workspace"
         assert (root / "MISSION.md").is_file()
         assert (root / "SPEC.md").is_file()
+
+
+class ScriptedGateway:
+    def __init__(self) -> None:
+        self.responses = iter(
+            [
+                "# Chapter\n\nA useful explanation with an example and exercise.",
+                '{"markdown":"# Chapter\\n\\nA clear lesson with an example and exercise.",'
+                '"scores":{"naturalness":90,"clarity":90,"conciseness":90,"teaching":90},'
+                '"findings":[]}',
+                '{"outcomes":{"facts_sources":"pass","goals_scope":"pass",'
+                '"teaching":"pass","logic_continuity":"pass"},"findings":[]}',
+            ]
+        )
+
+    def complete(self, *args, **kwargs) -> ModelResult:
+        return ModelResult(next(self.responses), 1, 1, "test-model")
+
+
+def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) -> None:
+    course = CourseService(db_session, settings.courses_root).create(
+        "quality-course", {"min_effective_chars_per_chapter": 1}
+    )
+    run = Run(course_id=course.id, thread_id=str(uuid4()), current_stage=5)
+    db_session.add(run)
+    db_session.flush()
+    runner = WorkflowRunner(settings)
+    passed = runner._chapter_quality_cycle(
+        db_session,
+        course,
+        run,
+        ScriptedGateway(),
+        {"id": "chapter-1", "title": "Chapter", "number": 1},
+        uuid4(),
+        "lessons/01-quality-course.md",
+    )
+    assert passed
+    evidence = settings.courses_root / "quality-course" / "workspace" / "quality"
+    assert (evidence / "chapter-1-round-1.json").is_file()

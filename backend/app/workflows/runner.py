@@ -10,6 +10,13 @@ from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.context_packs import ContextPackInput, ContextPackService
 from app.services.courses import CourseService
 from app.services.models import ModelGateway
+from app.services.quality import (
+    Finding,
+    deterministic_gate,
+    language_gate,
+    route_quality,
+    semantic_gate,
+)
 from app.services.releases import ReleaseService
 
 
@@ -76,7 +83,8 @@ class WorkflowRunner:
                 run.error_code = "model_not_configured"
                 run.error_summary = "OPENAI_API_KEY is required before chapter production"
                 return "paused"
-            self._produce_chapters(session, course, run)
+            if not self._produce_chapters(session, course, run):
+                return "waiting_human"
             run.node_summary = "batch production completed; quality evidence awaits approval"
         elif stage == 6:
             self._write_json_artifact(
@@ -153,7 +161,7 @@ class WorkflowRunner:
             session, course, run, "batch_plan", "workspace/batches/batch-01.json", batch
         )
 
-    def _produce_chapters(self, session: Session, course: Course, run: Run) -> None:
+    def _produce_chapters(self, session: Session, course: Course, run: Run) -> bool:
         batch = self._workspace_json(course, "workspace/batches/batch-01.json")
         gateway = ModelGateway(self.settings)
         for chapter in batch["chapters"]:
@@ -169,25 +177,152 @@ class WorkflowRunner:
                 writing_constraints=["include a clear explanation, example, and exercise"],
             )
             context = ContextPackService(ArtifactService(session)).build(course, run.id, pack)
-            prompt = " ".join(
-                [
-                    f"Write one Markdown lesson titled {chapter['title']}.",
-                    f"Use Context Pack {context.id}.",
-                    "Include a clear explanation, example, and exercise.",
-                ]
-            )
-            result = gateway.complete(
+            path = f"lessons/{chapter['number']:02d}-{course.slug}.md"
+            if not self._chapter_quality_cycle(
+                session, course, run, gateway, chapter, context.id, path
+            ):
+                return False
+        return True
+
+    def _chapter_quality_cycle(
+        self, session, course, run, gateway, chapter, context_id, path
+    ) -> bool:
+        minimum = int(self._definition(course).get("min_effective_chars_per_chapter", 1))
+        prior_fingerprints: list[str] = []
+        evidence: list[str] = []
+        for round_no in range(1, 4):
+            draft = gateway.complete(
                 run,
                 node="chapter_write",
                 operation="draft_chapter",
-                prompt=prompt,
+                prompt=" ".join(
+                    [
+                        f"Write a Markdown lesson titled {chapter['title']}.",
+                        f"Use Context Pack {context_id}.",
+                        "Include a clear explanation, example, and exercise.",
+                        "Repair evidence: " + "; ".join(evidence),
+                    ]
+                ),
                 prompt_name="chapter_writer",
                 prompt_hash=hashlib.sha256(b"chapter_writer_v1").hexdigest(),
             )
-            path = f"lessons/{chapter['number']:02d}-{course.slug}.md"
-            self._write_artifact(
-                session, course, run, "chapter_write", path, result.content.encode()
+            artifact = self._write_artifact(
+                session, course, run, "chapter_write", path, draft.content.encode(), round_no
             )
+            precheck = deterministic_gate(draft.content, artifact.revision, minimum)
+            if not precheck.passed:
+                self._write_quality_evidence(session, course, run, chapter, round_no, [precheck])
+                evidence = [finding.message for finding in precheck.findings]
+                prior_fingerprints.extend(finding.fingerprint for finding in precheck.findings)
+                continue
+            humanized = self._humanize(gateway, run, draft.content)
+            human_artifact = self._write_artifact(
+                session, course, run, "humanizer", path, humanized["markdown"].encode(), round_no
+            )
+            regression = deterministic_gate(humanized["markdown"], human_artifact.revision, minimum)
+            language = language_gate(
+                humanized["markdown"],
+                human_artifact.revision,
+                humanized["scores"],
+                humanized["findings"],
+            )
+            semantic = self._semantic_review(
+                gateway, run, humanized["markdown"], human_artifact.revision
+            )
+            results = [regression, language, semantic]
+            self._write_quality_evidence(session, course, run, chapter, round_no, results)
+            route = route_quality(results, round_no, prior_fingerprints)
+            if route == "pass":
+                return True
+            evidence = [finding.message for result in results for finding in result.findings]
+            prior_fingerprints.extend(
+                finding.fingerprint for result in results for finding in result.findings
+            )
+            if route == "waiting_human":
+                run.node_summary = (
+                    f"chapter {chapter['id']} needs human review after quality failures"
+                )
+                return False
+        return False
+
+    def _humanize(self, gateway, run, markdown: str) -> dict:
+        result = gateway.complete(
+            run,
+            node="humanizer",
+            operation="humanize_chapter",
+            prompt=(
+                "Return JSON only with markdown, scores (naturalness, clarity, conciseness, "
+                "teaching), and findings. Improve this Markdown:\n" + markdown
+            ),
+            prompt_name="natural_language_editor",
+            prompt_hash=hashlib.sha256(b"natural_language_editor_v1").hexdigest(),
+        )
+        payload = self._model_json(result.content)
+        return {
+            "markdown": str(payload["markdown"]),
+            "scores": {
+                name: int(payload["scores"][name])
+                for name in ("naturalness", "clarity", "conciseness", "teaching")
+            },
+            "findings": self._findings(payload.get("findings", [])),
+        }
+
+    def _semantic_review(self, gateway, run, markdown: str, revision: int):
+        result = gateway.complete(
+            run,
+            node="semantic_review",
+            operation="review_chapter_semantics",
+            prompt=(
+                "Return JSON only with outcomes for facts_sources, goals_scope, teaching, and "
+                "logic_continuity (pass/warning/blocker), plus findings. Review this Markdown:\n"
+                + markdown
+            ),
+            prompt_name="semantic_reviewer",
+            prompt_hash=hashlib.sha256(b"semantic_reviewer_v1").hexdigest(),
+        )
+        payload = self._model_json(result.content)
+        outcomes = {
+            name: payload["outcomes"][name]
+            for name in ("facts_sources", "goals_scope", "teaching", "logic_continuity")
+        }
+        return semantic_gate(
+            markdown, revision, outcomes, self._findings(payload.get("findings", []))
+        )
+
+    @staticmethod
+    def _model_json(content: str) -> dict:
+        raw = content.strip().removeprefix("```json").removesuffix("```").strip()
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("model returned a non-object structured response")
+        return payload
+
+    @staticmethod
+    def _findings(values: list[dict]) -> list[Finding]:
+        return [
+            Finding(
+                str(value.get("rule", "model_finding")),
+                str(value.get("location", "unknown")),
+                str(value.get("message", "")),
+                str(value.get("excerpt", "")),
+                str(value.get("fix", "")),
+            )
+            for value in values
+        ]
+
+    def _write_quality_evidence(self, session, course, run, chapter, round_no, results) -> None:
+        self._write_json_artifact(
+            session,
+            course,
+            run,
+            "quality_evidence",
+            f"workspace/quality/{chapter['id']}-round-{round_no}.json",
+            {
+                "chapter_id": chapter["id"],
+                "round": round_no,
+                "gates": [result.as_dict() for result in results],
+            },
+        )
 
     def _write_json_artifact(
         self, session: Session, course: Course, run: Run, node: str, path: str, value: dict
@@ -202,16 +337,23 @@ class WorkflowRunner:
         )
 
     def _write_artifact(
-        self, session: Session, course: Course, run: Run, node: str, path: str, content: bytes
-    ) -> None:
-        ArtifactService(session).write(
+        self,
+        session: Session,
+        course: Course,
+        run: Run,
+        node: str,
+        path: str,
+        content: bytes,
+        round_no: int = 1,
+    ):
+        return ArtifactService(session).write(
             course,
             ArtifactWrite(
                 course_id=course.id,
                 run_id=run.id,
                 node_name=node,
                 scope=f"stage-{run.current_stage}:{path}",
-                round_no=1,
+                round_no=round_no,
                 input_hash=hashlib.sha256(content).hexdigest(),
                 logical_path=path,
                 content=content,
