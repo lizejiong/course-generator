@@ -20,6 +20,13 @@ class ReleaseService:
     def build_rc(self, course: Course) -> Path:
         workspace = Path(course.workspace_path)
         target_root = self.releases_root / course.slug
+        source_hash = self._source_hash(workspace)
+        for candidate in target_root.glob("r[0-9][0-9][0-9][0-9]"):
+            manifest_path = candidate / "release.json"
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if manifest.get("source_hash") == source_hash:
+                    return candidate
         version = f"r{len(list(target_root.glob('r[0-9][0-9][0-9][0-9]'))) + 1:04d}"
         release = target_root / version
         if release.exists():
@@ -37,6 +44,7 @@ class ReleaseService:
             encoding="utf-8",
         )
         renderer = MarkdownIt("commonmark", {"html": False})
+        index_links: list[str] = []
         for lesson in sorted((workspace / "lessons").glob("*.md")):
             shutil.copy2(lesson, markdown_dir / lesson.name)
             html = (
@@ -48,6 +56,16 @@ class ReleaseService:
                 )
             )
             (site_dir / f"{lesson.stem}.html").write_text(html, encoding="utf-8")
+            index_links.append(f'<li><a href="{lesson.stem}.html">{lesson.stem}</a></li>')
+        index = (
+            Environment(loader=BaseLoader(), autoescape=True)
+            .from_string(_TEMPLATE)
+            .render(
+                title=course.slug,
+                body=Markup("<h1>Course</h1><ul>" + "".join(index_links) + "</ul>"),
+            )
+        )
+        (site_dir / "index.html").write_text(index, encoding="utf-8")
         quality = workspace / "quality.json"
         if quality.exists():
             shutil.copy2(quality, quality_dir / quality.name)
@@ -55,6 +73,7 @@ class ReleaseService:
             "version": version,
             "status": "rc",
             "course_id": str(course.id),
+            "source_hash": source_hash,
             "files": self._hashes(release),
         }
         (release / "release.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -78,3 +97,15 @@ class ReleaseService:
             for path in root.rglob("*")
             if path.is_file() and path.name != "release.json"
         }
+
+    @staticmethod
+    def _source_hash(workspace: Path) -> str:
+        visible = [workspace / "course.json", workspace / "quality.json"]
+        visible.extend((workspace / "lessons").glob("*.md"))
+        visible.extend((workspace / "workspace" / "source-snapshots").glob("*.txt"))
+        digest = hashlib.sha256()
+        for path in sorted(path for path in visible if path.is_file()):
+            digest.update(str(path.relative_to(workspace)).replace("\\", "/").encode())
+            digest.update(b"\0")
+            digest.update(hashlib.sha256(path.read_bytes()).digest())
+        return digest.hexdigest()

@@ -21,3 +21,5 @@ def test_release_candidate_is_hashed_and_promotion_does_not_change_its_bytes(
     assert manifest["status"] == "rc"
     assert (release / "release.json").read_bytes() == before
     assert json.loads(before)["files"]["markdown/01-intro.md"]
+    assert (release / "site" / "index.html").is_file()
+    assert service.build_rc(course) == release
