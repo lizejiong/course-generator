@@ -9,17 +9,25 @@ from app.services.releases import ReleaseService
 from app.services.reviews import ReviewService
 
 
+def definition(title: str = "API course") -> dict:
+    return {
+        "title": title,
+        "audience": "learners",
+        "learning_goals": ["one", "two", "three"],
+        "content_scope": "a bounded topic",
+        "expected_chapter_count": 1,
+        "min_effective_chars_per_chapter": 100,
+        "source_policy": "internal_only",
+    }
+
+
 def test_course_run_and_safe_file_api(settings, db_session) -> None:
     client = TestClient(create_app(settings))
     created = client.post(
         "/api/courses",
         json={
             "slug": "api-course",
-            "definition": {
-                "title": "API course",
-                "audience": "learners",
-                "learning_goals": ["test"],
-            },
+            "definition": definition(),
         },
     )
     assert created.status_code == 201
@@ -28,7 +36,7 @@ def test_course_run_and_safe_file_api(settings, db_session) -> None:
     assert initial_artifacts[0]["path"] == "course.json"
     patched = client.patch(
         f"/api/courses/{course_id}",
-        json={"definition": {"title": "Updated", "learning_goals": ["test"]}},
+        json={"definition": definition("Updated")},
     )
     assert patched.status_code == 200
     revisions = client.get(f"/api/courses/{course_id}/artifacts").json()
@@ -48,7 +56,11 @@ def test_course_run_and_safe_file_api(settings, db_session) -> None:
 
 def test_course_archive_and_restore_are_non_destructive(settings, db_session) -> None:
     client = TestClient(create_app(settings))
-    course = client.post("/api/courses", json={"slug": "archive-course", "definition": {}}).json()
+    invalid = client.post("/api/courses", json={"slug": "invalid-course", "definition": {}})
+    assert invalid.status_code == 422
+    course = client.post(
+        "/api/courses", json={"slug": "archive-course", "definition": definition("Archive")}
+    ).json()
     archived = client.post(f"/api/courses/{course['id']}/archive")
     restored = client.post(f"/api/courses/{course['id']}/restore")
     assert archived.json()["archived"] is True

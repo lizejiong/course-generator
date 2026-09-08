@@ -11,7 +11,7 @@ from app.config import Settings
 from app.db.models import Artifact, Course, ReviewEvent, Run
 from app.schemas.api import CourseCreate, CoursePatch, FileWrite, ReviewDecision, RunCreate
 from app.services.artifacts import ArtifactService, ArtifactWrite
-from app.services.courses import CourseService
+from app.services.courses import CourseService, validate_course_definition
 from app.services.invalidation import InvalidationService
 from app.services.jobs import JobService
 from app.services.reviews import ReviewService
@@ -32,6 +32,10 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
 
     @router.post("/courses", status_code=status.HTTP_201_CREATED)
     def create_course(payload: CourseCreate, db: Session = Depends(session)):
+        try:
+            validate_course_definition(payload.definition)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         try:
             courses = CourseService(db, settings.courses_root)
             course = courses.create(payload.slug, payload.definition)
@@ -69,6 +73,10 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
     @router.patch("/courses/{course_id}")
     def patch_course(course_id: UUID, payload: CoursePatch, db: Session = Depends(session)):
         course = course_or_404(db, course_id)
+        try:
+            validate_course_definition(payload.definition)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         previous = CourseService(db, settings.courses_root).read_definition(course)
         InvalidationService(db).invalidate(course, "course.json")
         content = json.dumps(payload.definition, ensure_ascii=False, indent=2).encode()

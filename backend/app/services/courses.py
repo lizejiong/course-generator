@@ -15,6 +15,30 @@ _EDITABLE = re.compile(
 )
 
 
+def validate_course_definition(definition: dict) -> None:
+    required = (
+        "title",
+        "audience",
+        "learning_goals",
+        "content_scope",
+        "expected_chapter_count",
+        "min_effective_chars_per_chapter",
+        "source_policy",
+    )
+    missing = [field for field in required if definition.get(field) in (None, "", [])]
+    if missing:
+        raise ValueError(f"missing required course fields: {', '.join(missing)}")
+    if (
+        not isinstance(definition["learning_goals"], list)
+        or not 3 <= len(definition["learning_goals"]) <= 7
+    ):
+        raise ValueError("learning_goals must contain 3 to 7 observable goals")
+    if int(definition["expected_chapter_count"]) < 1:
+        raise ValueError("expected_chapter_count must be positive")
+    if int(definition["min_effective_chars_per_chapter"]) < 1:
+        raise ValueError("min_effective_chars_per_chapter must be positive")
+
+
 class CourseService:
     def __init__(self, session: Session, courses_root: Path) -> None:
         self.session = session
