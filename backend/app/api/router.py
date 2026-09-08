@@ -1,4 +1,5 @@
 import hashlib
+import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -7,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.db.models import Artifact, Course, Run
+from app.db.models import Artifact, Course, ReviewEvent, Run
 from app.schemas.api import CourseCreate, CoursePatch, FileWrite, ReviewDecision, RunCreate
 from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.courses import CourseService
@@ -160,11 +161,21 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
     def list_releases(course_id: UUID, db: Session = Depends(session)):
         course = course_or_404(db, course_id)
         root = settings.releases_root / course.slug
-        return (
-            [item.name for item in sorted(root.glob("r[0-9][0-9][0-9][0-9]"))]
-            if root.exists()
-            else []
+        if not root.exists():
+            return []
+        published = set(
+            db.scalars(
+                select(ReviewEvent.target).where(
+                    ReviewEvent.action == "approve",
+                    ReviewEvent.scope == "release",
+                    ReviewEvent.run_id.in_(select(Run.id).where(Run.course_id == course_id)),
+                )
+            )
         )
+        return [
+            {"version": item.name, "status": "published" if item.name in published else "rc"}
+            for item in sorted(root.glob("r[0-9][0-9][0-9][0-9]"))
+        ]
 
     @router.get("/courses/{course_id}/releases/{version}")
     def get_release(course_id: UUID, version: str, db: Session = Depends(session)):
@@ -172,7 +183,17 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
         manifest = settings.releases_root / course.slug / version / "release.json"
         if not manifest.is_file():
             raise HTTPException(status_code=404, detail="release not found")
-        return Response(manifest.read_text(encoding="utf-8"), media_type="application/json")
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        published = db.scalar(
+            select(ReviewEvent.id).where(
+                ReviewEvent.action == "approve",
+                ReviewEvent.scope == "release",
+                ReviewEvent.target == version,
+                ReviewEvent.run_id.in_(select(Run.id).where(Run.course_id == course_id)),
+            )
+        )
+        payload["status"] = "published" if published else "rc"
+        return Response(json.dumps(payload), media_type="application/json")
 
     return router
 

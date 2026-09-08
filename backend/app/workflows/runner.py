@@ -41,7 +41,13 @@ class WorkflowRunner:
         if checkpoint_state:
             run.current_stage = checkpoint_state["stage"]
         if job.job_type == "publish":
-            ReleaseService(self.settings.releases_root).promote(self._release_path(course))
+            event = session.get(ReviewEvent, job.input_event_id) if job.input_event_id else None
+            release = self._release_path(course)
+            if event is None or event.target != release.name:
+                raise ValueError(
+                    "publication review event does not match the current release candidate"
+                )
+            ReleaseService(self.settings.releases_root).promote(release)
             run.node_summary = "release promoted by an append-only review event"
             return "completed"
         if job.job_type == "resume" and checkpoint_state.get("review_event_id") != str(
