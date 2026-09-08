@@ -40,3 +40,25 @@ def test_approval_cannot_waive_a_real_blocker() -> None:
             action="approve",
             evidence={"unresolved_blocker": True},
         )
+
+
+def test_release_approval_requires_waiting_stage_seven_candidate() -> None:
+    session = ReviewSession()
+    with pytest.raises(ValueError, match="stage-seven"):
+        ReviewService(session).decide(  # type: ignore[arg-type]
+            Run(id=uuid4(), course_id=uuid4(), thread_id="thread", current_stage=6),
+            scope="release",
+            target="r0001",
+            action="approve",
+        )
+    run = Run(
+        id=uuid4(),
+        course_id=uuid4(),
+        thread_id="thread-2",
+        current_stage=7,
+        status="waiting_human",
+    )
+    ReviewService(session).decide(  # type: ignore[arg-type]
+        run, scope="release", target="r0001", action="approve"
+    )
+    assert any(getattr(item, "job_type", None) == "publish" for item in session.added)

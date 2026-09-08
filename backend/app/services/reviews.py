@@ -30,6 +30,12 @@ class ReviewService:
             raise ValueError("unsupported review action")
         if action == "approve" and (evidence or {}).get("unresolved_blocker"):
             raise ValueError("approval cannot waive a real blocker")
+        if scope == "release" and (
+            action != "approve" or run.current_stage != 7 or run.status != "waiting_human"
+        ):
+            raise ValueError("only the waiting stage-seven release candidate can be published")
+        if action in {"approve", "rework"} and run.status != "waiting_human":
+            raise ValueError("a run can only be reviewed while waiting for human input")
         event = ReviewEvent(
             run_id=run.id,
             scope=scope,
