@@ -91,3 +91,24 @@ def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) ->
     assert passed
     evidence = settings.courses_root / "quality-course" / "workspace" / "quality"
     assert (evidence / "chapter-1-round-1.json").is_file()
+
+
+def test_batch_plan_has_parseable_context_scope_and_course_quality_detects_missing_lessons(
+    settings, db_session
+) -> None:
+    course = CourseService(db_session, settings.courses_root).create(
+        "plan-course", {"expected_chapter_count": 2, "min_effective_chars_per_chapter": 10}
+    )
+    run = Run(course_id=course.id, thread_id=str(uuid4()), current_stage=4)
+    db_session.add(run)
+    db_session.flush()
+    runner = WorkflowRunner(settings)
+    runner._write_batches(db_session, course, run)
+    batch = runner._workspace_json(course, "workspace/batches/batch-01.json")
+    assert batch["execution"] == "sequential"
+    assert batch["context_pack_scope"][0]["blueprint_ref"].startswith("workspace/BLUEPRINT.md#")
+    assert not list(
+        (settings.courses_root / "plan-course" / "workspace" / "context-packs").rglob("*.json")
+    )
+    run.current_stage = 6
+    assert runner._write_course_quality(db_session, course, run)

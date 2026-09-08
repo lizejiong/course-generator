@@ -126,15 +126,12 @@ class WorkflowRunner:
                 return "waiting_human"
             run.node_summary = "batch production completed; quality evidence awaits approval"
         elif stage == 6:
-            self._write_json_artifact(
-                session,
-                course,
-                run,
-                "course_quality",
-                "quality.json",
-                {"status": "pending_semantic_review", "stage": 6},
+            blockers = self._write_course_quality(session, course, run)
+            run.node_summary = (
+                "course-wide deterministic quality blockers need review"
+                if blockers
+                else "course-wide quality review ready for approval"
             )
-            run.node_summary = "course-wide quality review ready for approval"
         elif stage == 7:
             ReleaseService(self.settings.releases_root).build_rc(course)
             run.node_summary = "immutable release candidate ready for final approval"
@@ -202,7 +199,20 @@ class WorkflowRunner:
             {"id": f"chapter-{number}", "number": number, "title": f"Chapter {number}"}
             for number in range(1, int(definition.get("expected_chapter_count", 1)) + 1)
         ]
-        batch = {"batch_id": "batch-01", "chapters": chapters, "context_pack_scope": []}
+        batch = {
+            "batch_id": "batch-01",
+            "chapters": chapters,
+            "context_pack_scope": [
+                {
+                    "chapter_id": chapter["id"],
+                    "blueprint_ref": f"workspace/BLUEPRINT.md#{chapter['id']}",
+                    "source_refs": [],
+                }
+                for chapter in chapters
+            ],
+            "token_budget": definition.get("token_limit"),
+            "execution": "sequential",
+        }
         self._write_json_artifact(
             session, course, run, "batch_plan", "workspace/batches/batch-01.json", batch
         )
@@ -369,6 +379,34 @@ class WorkflowRunner:
                 "gates": [result.as_dict() for result in results],
             },
         )
+
+    def _write_course_quality(self, session: Session, course: Course, run: Run) -> bool:
+        batch = self._workspace_json(course, "workspace/batches/batch-01.json")
+        minimum = int(self._definition(course).get("min_effective_chars_per_chapter", 1))
+        chapter_results: list[dict] = []
+        has_blockers = False
+        for chapter in batch["chapters"]:
+            path = Path(course.workspace_path) / f"lessons/{chapter['number']:02d}-{course.slug}.md"
+            if not path.is_file():
+                has_blockers = True
+                chapter_results.append(
+                    {"chapter_id": chapter["id"], "missing_lesson": True, "gates": []}
+                )
+                continue
+            gate = deterministic_gate(path.read_text(encoding="utf-8"), 1, minimum)
+            has_blockers = has_blockers or not gate.passed
+            chapter_results.append(
+                {"chapter_id": chapter["id"], "missing_lesson": False, "gates": [gate.as_dict()]}
+            )
+        self._write_json_artifact(
+            session,
+            course,
+            run,
+            "course_quality",
+            "quality.json",
+            {"stage": 6, "has_blockers": has_blockers, "chapters": chapter_results},
+        )
+        return has_blockers
 
     def _write_json_artifact(
         self, session: Session, course: Course, run: Run, node: str, path: str, value: dict
