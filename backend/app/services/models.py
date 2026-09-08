@@ -35,6 +35,8 @@ class ModelGateway:
         prompt: str,
         prompt_name: str,
         prompt_hash: str,
+        skill_name: str | None = None,
+        skill_hash: str | None = None,
         model_override: str | None = None,
     ) -> ModelResult:
         estimated_next_call = max(256, len(prompt.encode("utf-8")) // 4)
@@ -62,6 +64,8 @@ class ModelGateway:
             "model": model,
             "prompt_name": prompt_name,
             "prompt_hash": prompt_hash,
+            "skill_name": skill_name,
+            "skill_hash": skill_hash,
             "input_hash": hashlib.sha256(prompt.encode()).hexdigest(),
             "output_hash": hashlib.sha256(content.encode()).hexdigest(),
             "input_tokens": usage.prompt_tokens if usage else None,

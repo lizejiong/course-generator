@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, object_session
 from app.config import Settings
 from app.db.checkpoints import postgres_checkpointer
 from app.db.models import Course, Job, ReviewEvent, Run
+from app.prompts import render_prompt
 from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.context_packs import ContextPackInput, ContextPackService
 from app.services.courses import CourseService
@@ -267,20 +268,22 @@ class WorkflowRunner:
         prior_fingerprints: list[str] = []
         evidence: list[str] = []
         for round_no in range(1, 4):
+            prompt = render_prompt(
+                "chapter_writer",
+                skill="instructional-writer",
+                title=chapter["title"],
+                context_id=context_id,
+                repair_evidence="; ".join(evidence),
+            )
             draft = gateway.complete(
                 run,
                 node="chapter_write",
                 operation="draft_chapter",
-                prompt=" ".join(
-                    [
-                        f"Write a Markdown lesson titled {chapter['title']}.",
-                        f"Use Context Pack {context_id}.",
-                        "Include a clear explanation, example, and exercise.",
-                        "Repair evidence: " + "; ".join(evidence),
-                    ]
-                ),
-                prompt_name="chapter_writer",
-                prompt_hash=hashlib.sha256(b"chapter_writer_v1").hexdigest(),
+                prompt=prompt.content,
+                prompt_name=prompt.name,
+                prompt_hash=prompt.content_hash,
+                skill_name=prompt.skill_name,
+                skill_hash=prompt.skill_hash,
             )
             artifact = self._write_artifact(
                 session, course, run, "chapter_write", path, draft.content.encode(), round_no
@@ -322,16 +325,18 @@ class WorkflowRunner:
         return False
 
     def _humanize(self, gateway, run, markdown: str) -> dict:
+        prompt = render_prompt(
+            "natural_language_editor", skill="natural-language-editor", markdown=markdown
+        )
         result = gateway.complete(
             run,
             node="humanizer",
             operation="humanize_chapter",
-            prompt=(
-                "Return JSON only with markdown, scores (naturalness, clarity, conciseness, "
-                "teaching), and findings. Improve this Markdown:\n" + markdown
-            ),
-            prompt_name="natural_language_editor",
-            prompt_hash=hashlib.sha256(b"natural_language_editor_v1").hexdigest(),
+            prompt=prompt.content,
+            prompt_name=prompt.name,
+            prompt_hash=prompt.content_hash,
+            skill_name=prompt.skill_name,
+            skill_hash=prompt.skill_hash,
         )
         payload = self._model_json(result.content)
         return {
@@ -344,17 +349,14 @@ class WorkflowRunner:
         }
 
     def _semantic_review(self, gateway, run, markdown: str, revision: int):
+        prompt = render_prompt("semantic_reviewer", markdown=markdown)
         result = gateway.complete(
             run,
             node="semantic_review",
             operation="review_chapter_semantics",
-            prompt=(
-                "Return JSON only with outcomes for facts_sources, goals_scope, teaching, and "
-                "logic_continuity (pass/warning/blocker), plus findings. Review this Markdown:\n"
-                + markdown
-            ),
-            prompt_name="semantic_reviewer",
-            prompt_hash=hashlib.sha256(b"semantic_reviewer_v1").hexdigest(),
+            prompt=prompt.content,
+            prompt_name=prompt.name,
+            prompt_hash=prompt.content_hash,
         )
         payload = self._model_json(result.content)
         outcomes = {
