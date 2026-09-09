@@ -7,6 +7,23 @@
 
 ---
 
+## 交付验收（2026-09-09）
+
+本计划中的后端实施项均已完成；下列未勾选条目保留为最初的实施记录，实际状态以本节为准。
+
+| 验收范围 | 当前证据 |
+| --- | --- |
+| 持久化与 migration | 五张业务表、部分唯一活跃 job 索引，以及官方 LangGraph PostgreSQL Checkpointer 已由 PostgreSQL 集成测试覆盖。 |
+| 工作区与 artifact | 稳定 operation ID、SHA-256、原子工作视图、人工 revision、模型输出重入恢复及失效传播均有服务与测试。 |
+| Worker 与工作流 | `SELECT … SKIP LOCKED` 租约领取、技术重试、暂停/停止、人工恢复，以及实际 LangGraph 阶段图与 Checkpoint 恢复已覆盖。 |
+| 课程质量与审核 | 三门质量门、最多三轮返工、阶段六 blocker/ warning 规则、不可豁免审核事件和最终发布已覆盖。 |
+| 来源与发布 | SSRF 防护抓取、可选 Tavily 发现、不可变快照与来源分片、Context Pack、RC/静态站点/哈希清单及发布投影已覆盖。 |
+| 最终验证 | `ruff check backend`、`pytest backend/tests -q`（38 通过）、`alembic upgrade head`、`/health` 与 `/openapi.json` 均在本地 PostgreSQL Compose 环境验证成功。 |
+
+前端实现不属于本次交付范围，按已确认顺序在后端接口稳定后单独启动。
+
+---
+
 ## 文件结构
 
 | 路径 | 责任 |
