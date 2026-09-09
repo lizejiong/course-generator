@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Job, Run
@@ -22,7 +22,7 @@ class JobService:
     def claim(self, worker_id: str, lease_seconds: int = 60) -> Job | None:
         now = datetime.now(UTC)
         eligible = or_(
-            and_(Job.status == "queued", Job.available_at <= now),
+            and_(Job.status == "queued", Job.available_at <= func.now()),
             and_(Job.status == "running", Job.lease_expires_at < now),
         )
         job = self.session.scalar(

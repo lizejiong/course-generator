@@ -1,5 +1,7 @@
 import hashlib
+import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -58,5 +60,28 @@ class SourceSnapshotService:
                     content=content.encode(),
                 ),
             )
-            snapshots.append({"origin": origin, "sha256": digest, "artifact_id": str(artifact.id)})
+            captured_at = datetime.now(UTC).isoformat()
+            manifest = {
+                "origin": origin,
+                "sha256": digest,
+                "source_policy": source_policy,
+                "captured_at": captured_at,
+                "content_artifact_id": str(artifact.id),
+            }
+            self.artifacts.write(
+                course,
+                ArtifactWrite(
+                    course_id=course.id,
+                    run_id=run_id,
+                    node_name="source_snapshot_manifest",
+                    scope=f"source-manifest-{index}:{origin}",
+                    round_no=1,
+                    input_hash=hashlib.sha256(
+                        f"{digest}\0{origin}\0{source_policy}\0{captured_at}".encode()
+                    ).hexdigest(),
+                    logical_path=f"workspace/source-snapshots/{digest}.json",
+                    content=json.dumps(manifest, ensure_ascii=False, indent=2).encode(),
+                ),
+            )
+            snapshots.append({**manifest, "artifact_id": str(artifact.id)})
         return snapshots

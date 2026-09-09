@@ -32,6 +32,7 @@ class InvalidationService:
             "task_definition": 2,
             "sources": 3,
             "source_snapshot": 3,
+            "source_snapshot_manifest": 3,
             "source_index": 3,
             "blueprint": 3,
             "batch_plan": 4,
