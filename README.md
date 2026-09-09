@@ -6,7 +6,12 @@
 
 ## 当前状态
 
-项目目前完成 V1 产品需求、交互原型和技术设计，下一步开始实现后端。
+V1 后端已完成并验收：Python 3.12、FastAPI、PostgreSQL、独立同步 Worker 与 LangGraph 工作流均已实现。已覆盖课程创建、七阶段状态投影、人工审批/返工/暂停恢复、质量闭环、RC 构建与最终发布；验收时已通过 38 项后端测试、Alembic 迁移、`/health` 与 OpenAPI 检查。
+
+当前后续工作为两项：
+
+- 使用真实 OpenAI 兼容模型与可选 Tavily 服务做人工外部服务验收（需要由操作者配置密钥，详见 `outputs/external-service-manual-acceptance.md`）。
+- 在既有 API 和七阶段观察模型之上实现 React 前端；不扩展后端产品范围。
 
 ## 后端开发
 
@@ -40,6 +45,7 @@ uv run ruff check backend
 - [产品需求文档](outputs/course-agent-prd-v0.2.md)
 - [技术设计](outputs/course-generator-technical-design-v0.1.md)
 - [决策摘要](outputs/course-agent-decision-brief.md)
+- [真实外部服务人工验收手册](outputs/external-service-manual-acceptance.md)
 - [交互原型](outputs/course-agent-prd-prototype.html)
 
 ## V1 技术方向
