@@ -32,7 +32,7 @@ def test_review_is_append_only_and_approve_enqueues_resume_job() -> None:
 
 
 def test_approval_cannot_waive_a_real_blocker() -> None:
-    with pytest.raises(ValueError, match="cannot waive"):
+    with pytest.raises(ValueError, match="不能豁免"):
         ReviewService(ReviewSession()).decide(  # type: ignore[arg-type]
             Run(id=uuid4(), course_id=uuid4(), thread_id="thread"),
             scope="stage",
@@ -59,7 +59,7 @@ def test_stage_six_approval_requires_a_quality_report_without_blockers(tmp_path)
         status="waiting_human",
         current_stage=6,
     )
-    with pytest.raises(ValueError, match="cannot waive"):
+    with pytest.raises(ValueError, match="不能豁免"):
         ReviewService(StageSixSession()).decide(  # type: ignore[arg-type]
             run, scope="stage", target="stage-6", action="approve"
         )
@@ -67,7 +67,7 @@ def test_stage_six_approval_requires_a_quality_report_without_blockers(tmp_path)
 
 def test_release_approval_requires_waiting_stage_seven_candidate() -> None:
     session = ReviewSession()
-    with pytest.raises(ValueError, match="stage-seven"):
+    with pytest.raises(ValueError, match="阶段七"):
         ReviewService(session).decide(  # type: ignore[arg-type]
             Run(id=uuid4(), course_id=uuid4(), thread_id="thread", current_stage=6),
             scope="release",

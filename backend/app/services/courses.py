@@ -54,10 +54,10 @@ class CourseService:
 
     def create(self, slug: str, definition: dict) -> Course:
         if not _SLUG.fullmatch(slug):
-            raise ValueError("slug must contain lowercase letters, numbers, and single hyphens")
+            raise ValueError("课程 slug 只能包含小写字母、数字和单个连字符")
         path = self.courses_root / slug
         if self.session.scalar(select(Course).where(Course.slug == slug)) or path.exists():
-            raise ValueError("course slug already exists")
+            raise ValueError("课程 slug 已存在")
         (path / "workspace" / "batches").mkdir(parents=True)
         (path / "workspace" / "context-packs").mkdir(parents=True)
         (path / "lessons").mkdir()
@@ -73,13 +73,13 @@ class CourseService:
     def get(self, course_id: UUID) -> Course:
         course = self.session.get(Course, course_id)
         if course is None:
-            raise LookupError("course not found")
+            raise LookupError("课程不存在")
         return course
 
     def course_path(self, course: Course) -> Path:
         path = Path(course.workspace_path).resolve()
         if self.courses_root not in path.parents:
-            raise ValueError("course workspace escaped configured root")
+            raise ValueError("课程工作区越出了配置的根目录")
         return path
 
     def read_definition(self, course: Course) -> dict:
@@ -93,10 +93,10 @@ class CourseService:
 
     def editable_path(self, course: Course, logical_path: str) -> Path:
         if not _EDITABLE.fullmatch(logical_path):
-            raise ValueError("path is not an editable course Markdown/JSON view")
+            raise ValueError("该路径不是可编辑的课程 Markdown/JSON 视图")
         target = (self.course_path(course) / logical_path).resolve()
         if self.course_path(course) not in target.parents:
-            raise ValueError("path traversal is forbidden")
+            raise ValueError("禁止路径穿越")
         return target
 
     @staticmethod

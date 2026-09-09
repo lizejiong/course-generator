@@ -29,17 +29,17 @@ class ReviewService:
         related_revision: int | None = None,
     ) -> ReviewEvent:
         if action not in {"approve", "rework", "stop", "acknowledge"}:
-            raise ValueError("unsupported review action")
+            raise ValueError("不支持的审核动作")
         if action == "approve" and (evidence or {}).get("unresolved_blocker"):
-            raise ValueError("approval cannot waive a real blocker")
+            raise ValueError("批准不能豁免真实 blocker")
         if action == "approve" and scope == "stage" and run.current_stage == 6:
             self._require_course_quality_clear(run)
         if scope == "release" and (
             action != "approve" or run.current_stage != 7 or run.status != "waiting_human"
         ):
-            raise ValueError("only the waiting stage-seven release candidate can be published")
+            raise ValueError("只有等待审核的阶段七发布候选可以正式发布")
         if action in {"approve", "rework"} and run.status != "waiting_human":
-            raise ValueError("a run can only be reviewed while waiting for human input")
+            raise ValueError("只能审核等待人工输入的运行")
         event = ReviewEvent(
             run_id=run.id,
             scope=scope,
@@ -65,10 +65,10 @@ class ReviewService:
     def _require_course_quality_clear(self, run: Run) -> None:
         course = self.session.get(Course, run.course_id)
         if course is None:
-            raise ValueError("course not found for stage-six review")
+            raise ValueError("阶段六审核对应的课程不存在")
         quality_path = Path(course.workspace_path) / "quality.json"
         if not quality_path.is_file():
-            raise ValueError("stage-six quality report is required before approval")
+            raise ValueError("批准前必须存在阶段六质量报告")
         report = json.loads(quality_path.read_text(encoding="utf-8"))
         if report.get("has_blockers"):
-            raise ValueError("approval cannot waive a real blocker; submit rework instead")
+            raise ValueError("批准不能豁免真实 blocker；请提交返工")

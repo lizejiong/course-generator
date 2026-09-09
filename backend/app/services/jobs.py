@@ -46,7 +46,7 @@ class JobService:
 
     def renew(self, job: Job, worker_id: str, lease_seconds: int = 60) -> None:
         if job.status != "running" or job.lease_owner != worker_id:
-            raise ValueError("only the lease owner may renew a running job")
+            raise ValueError("只有租约持有者可以续租执行中的任务")
         job.lease_expires_at = datetime.now(UTC) + timedelta(seconds=lease_seconds)
 
     def succeed(self, job: Job) -> None:

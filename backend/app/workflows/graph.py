@@ -26,7 +26,7 @@ def build_main_graph(nodes: dict[str, Node], checkpointer=None):
     }
     missing = required - nodes.keys()
     if missing:
-        raise ValueError(f"missing workflow nodes: {', '.join(sorted(missing))}")
+        raise ValueError(f"缺少工作流节点：{', '.join(sorted(missing))}")
     chapter = build_chapter_cycle(
         {
             "context_pack": nodes["chapter_context"],

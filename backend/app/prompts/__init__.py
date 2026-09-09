@@ -29,7 +29,7 @@ def render_prompt(name: str, /, *, skill: str | None = None, **values: object) -
     try:
         template = (_PROMPT_ROOT / _PROMPTS[name]).read_text(encoding="utf-8")
     except KeyError as error:
-        raise ValueError(f"unknown prompt: {name}") from error
+        raise ValueError(f"未知提示词：{name}") from error
     skill_text = ""
     skill_hash = None
     if skill:

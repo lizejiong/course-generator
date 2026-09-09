@@ -30,7 +30,7 @@ class ReleaseService:
         version = f"r{len(list(target_root.glob('r[0-9][0-9][0-9][0-9]'))) + 1:04d}"
         release = target_root / version
         if release.exists():
-            raise ValueError("release directory is immutable")
+            raise ValueError("发布目录不可变")
         markdown_dir = release / "markdown"
         site_dir = release / "site"
         quality_dir = release / "quality"
@@ -83,7 +83,7 @@ class ReleaseService:
         manifest_path = release / "release.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest["status"] != "rc":
-            raise ValueError("only a valid release candidate can be published")
+            raise ValueError("只有有效的发布候选可以正式发布")
         # A publication decision is an append-only review event in PostgreSQL.
         # The RC directory, including its manifest, must never be modified.
         return manifest

@@ -10,7 +10,7 @@ def test_token_budget_pauses_before_model_call_without_recording_prompt(settings
     run = Run(
         course_id=uuid4(), thread_id="token-run", token_limit=1, token_usage=0, token_ledger=[]
     )
-    with pytest.raises(TokenBudgetPause, match="may exceed"):
+    with pytest.raises(TokenBudgetPause, match="可能超过"):
         ModelGateway(settings).complete(
             run,
             node="chapter_write",

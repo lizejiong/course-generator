@@ -17,7 +17,7 @@ class ModelResult:
 
 
 class TokenBudgetPause(RuntimeError):
-    """The next model call is not allowed to exceed the user-owned run budget."""
+    """下一次模型调用不允许超过用户配置的运行预算。"""
 
 
 class ModelGateway:
@@ -43,10 +43,10 @@ class ModelGateway:
         if run.token_limit and run.token_usage + estimated_next_call > run.token_limit:
             run.pause_requested = True
             run.error_code = "token_budget_pause"
-            run.error_summary = "the next model call may exceed the configured token budget"
+            run.error_summary = "下一次模型调用可能超过已配置的 Token 预算"
             raise TokenBudgetPause(run.error_summary)
         if not self.settings.openai_api_key:
-            raise RuntimeError("OPENAI_API_KEY is required for model execution")
+            raise RuntimeError("执行模型调用需要配置 OPENAI_API_KEY")
         model = model_override or self.settings.openai_model
         response = OpenAI(
             api_key=self.settings.openai_api_key,
@@ -76,9 +76,9 @@ class ModelGateway:
         if run.token_limit and run.token_usage >= run.token_limit:
             run.pause_requested = True
             run.error_code = "token_budget_exhausted"
-            run.error_summary = "the configured token budget has been exhausted"
+            run.error_summary = "已配置的 Token 预算已耗尽"
         elif run.token_limit and run.token_usage >= int(run.token_limit * 0.8):
-            run.node_summary = "token budget is at or above 80%; review the remaining budget"
+            run.node_summary = "Token 预算已达到或超过 80%，请检查剩余预算"
         return ModelResult(
             content, ledger_entry["input_tokens"], ledger_entry["output_tokens"], model
         )

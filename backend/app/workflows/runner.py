@@ -36,11 +36,11 @@ class WorkflowRunner:
     def execute(self, job: Job) -> str:
         session = object_session(job)
         if session is None:
-            raise RuntimeError("workflow job must be attached to a database session")
+            raise RuntimeError("工作流任务必须关联数据库会话")
         run = session.get(Run, job.run_id)
         course = session.get(Course, run.course_id) if run else None
         if run is None or course is None:
-            raise LookupError("run or course not found")
+            raise LookupError("运行或课程不存在")
         config = {"configurable": {"thread_id": run.thread_id, "checkpoint_ns": ""}}
         with postgres_checkpointer(self.settings) as checkpointer:
             graph = build_stage_graph(self._stage_nodes(session, course, run, job), checkpointer)
@@ -51,9 +51,7 @@ class WorkflowRunner:
             event = session.get(ReviewEvent, job.input_event_id) if job.input_event_id else None
             release = self._release_path(course)
             if event is None or event.target != release.name:
-                raise ValueError(
-                    "publication review event does not match the current release candidate"
-                )
+                raise ValueError("发布审核事件与当前发布候选不匹配")
             ReleaseService(self.settings.releases_root).promote(release)
             run.node_summary = "release promoted by an append-only review event"
             return "completed"
@@ -110,13 +108,13 @@ class WorkflowRunner:
     def _apply_review_decision(self, session: Session, run: Run, job: Job) -> None:
         event = session.get(ReviewEvent, job.input_event_id) if job.input_event_id else None
         if event is None:
-            raise ValueError("resume job requires its immutable review event")
+            raise ValueError("恢复任务必须关联不可变审核事件")
         if event.action == "approve":
             run.current_stage = min(run.current_stage + 1, 7)
         elif event.action == "rework":
             run.node_summary = f"rework requested: {event.comment or 'no comment'}"
         else:
-            raise ValueError("only approve or rework can resume a run")
+            raise ValueError("只有批准或返工可以恢复运行")
 
     def _execute_stage(self, session: Session, course: Course, run: Run) -> str:
         stage = run.current_stage
@@ -161,7 +159,7 @@ class WorkflowRunner:
             ReleaseService(self.settings.releases_root).build_rc(course)
             run.node_summary = "不可变发布候选已生成，等待最终人工批准"
         else:
-            raise ValueError(f"unknown stage {stage}")
+            raise ValueError(f"未知阶段：{stage}")
         return "waiting_human"
 
     def _definition(self, course: Course) -> dict:
@@ -173,7 +171,7 @@ class WorkflowRunner:
     def _session_for(course: Course) -> Session:
         session = object_session(course)
         if session is None:
-            raise RuntimeError("course must be attached to a database session")
+            raise RuntimeError("课程必须关联数据库会话")
         return session
 
     def _write_task_definition(self, session: Session, course: Course, run: Run) -> None:
@@ -461,7 +459,7 @@ class WorkflowRunner:
         outcomes = payload["outcomes"]
         required = ("facts_sources", "goals_scope", "teaching", "logic_continuity")
         if not isinstance(outcomes, dict) or any(name not in outcomes for name in required):
-            raise ValueError("semantic review did not return every required outcome")
+            raise ValueError("语义审校没有返回全部必需结果")
         return payload
 
     def _cached_model_output(
@@ -520,7 +518,7 @@ class WorkflowRunner:
         raw = content.strip().removeprefix("```json").removesuffix("```").strip()
         payload = json.loads(raw)
         if not isinstance(payload, dict):
-            raise ValueError("model returned a non-object structured response")
+            raise ValueError("模型没有返回对象形式的结构化结果")
         return payload
 
     @staticmethod
@@ -649,5 +647,5 @@ class WorkflowRunner:
     def _release_path(self, course: Course) -> Path:
         releases = sorted((self.settings.releases_root / course.slug).glob("r[0-9][0-9][0-9][0-9]"))
         if not releases:
-            raise ValueError("there is no release candidate to publish")
+            raise ValueError("没有可发布的发布候选")
         return releases[-1]

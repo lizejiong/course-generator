@@ -99,7 +99,7 @@ class ArtifactService:
         if existing is not None:
             storage = Path(existing.storage_path)
             if not storage.is_file():
-                raise RuntimeError(f"durable artifact is missing: {existing.operation_id}")
+                raise RuntimeError(f"持久化产物缺失：{existing.operation_id}")
             self._refresh_view(Path(course.workspace_path) / existing.logical_path, storage)
             return existing
         if self.storage_path(course, request).is_file():

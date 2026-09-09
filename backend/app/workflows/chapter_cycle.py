@@ -12,7 +12,7 @@ def build_chapter_cycle(nodes: dict[str, ChapterNode], checkpointer=None):
     required = {"context_pack", "write", "precheck", "humanize", "semantic", "aggregate"}
     missing = required - nodes.keys()
     if missing:
-        raise ValueError(f"missing chapter cycle nodes: {', '.join(sorted(missing))}")
+        raise ValueError(f"缺少章节循环节点：{', '.join(sorted(missing))}")
     graph = StateGraph(WorkflowState)
     for name in required:
         graph.add_node(name, nodes[name])
