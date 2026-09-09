@@ -554,6 +554,7 @@ class WorkflowRunner:
         chapter_results: list[dict] = []
         has_blockers = False
         repair_targets: list[str] = []
+        titles: dict[str, list[str]] = {}
         for chapter in batch["chapters"]:
             path = Path(course.workspace_path) / f"lessons/{chapter['number']:02d}-{course.slug}.md"
             if not path.is_file():
@@ -563,13 +564,29 @@ class WorkflowRunner:
                     {"chapter_id": chapter["id"], "missing_lesson": True, "gates": []}
                 )
                 continue
-            gate = deterministic_gate(path.read_text(encoding="utf-8"), 1, minimum)
+            markdown = path.read_text(encoding="utf-8")
+            gate = deterministic_gate(markdown, 1, minimum)
+            title = self._lesson_title(markdown)
+            if title:
+                titles.setdefault(title, []).append(chapter["id"])
             has_blockers = has_blockers or not gate.passed
             chapter_results.append(
                 {"chapter_id": chapter["id"], "missing_lesson": False, "gates": [gate.as_dict()]}
             )
             if not gate.passed:
                 repair_targets.append(chapter["id"])
+        warnings = [
+            {
+                "fingerprint": hashlib.sha256(
+                    f"duplicate_chapter_title\0{title}".encode()
+                ).hexdigest(),
+                "rule": "duplicate_chapter_title",
+                "message": f"章节标题“{title}”重复出现",
+                "chapters": chapter_ids,
+            }
+            for title, chapter_ids in titles.items()
+            if len(chapter_ids) > 1
+        ]
         repair_plan = None
         if repair_targets:
             repair_plan = {
@@ -601,9 +618,17 @@ class WorkflowRunner:
                 "has_blockers": has_blockers,
                 "chapters": chapter_results,
                 "repair_plan": repair_plan,
+                "unresolved_warnings": warnings,
             },
         )
         return has_blockers
+
+    @staticmethod
+    def _lesson_title(markdown: str) -> str | None:
+        for line in markdown.splitlines():
+            if line.startswith("# "):
+                return line.removeprefix("# ").strip()
+        return None
 
     def _write_json_artifact(
         self, session: Session, course: Course, run: Run, node: str, path: str, value: dict

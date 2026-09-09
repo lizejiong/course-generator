@@ -65,6 +65,42 @@ def test_stage_six_approval_requires_a_quality_report_without_blockers(tmp_path)
         )
 
 
+def test_stage_six_warnings_must_be_acknowledged_before_approval(tmp_path) -> None:
+    class WarningSession(ReviewSession):
+        def __init__(self) -> None:
+            super().__init__()
+            self.course = type("Course", (), {"workspace_path": str(tmp_path)})()
+
+        def get(self, model, identifier):
+            return self.course
+
+        def scalars(self, statement):
+            return [item for item in self.added if getattr(item, "action", None) == "acknowledge"]
+
+    (tmp_path / "quality.json").write_text(
+        '{"has_blockers": false, "unresolved_warnings": [{"fingerprint": "warning-1"}]}',
+        encoding="utf-8",
+    )
+    run = Run(
+        id=uuid4(),
+        course_id=uuid4(),
+        thread_id="stage-six-warning",
+        status="waiting_human",
+        current_stage=6,
+    )
+    session = WarningSession()
+    with pytest.raises(ValueError, match="必须确认"):
+        ReviewService(session).decide(run, scope="stage", target="stage-6", action="approve")  # type: ignore[arg-type]
+    ReviewService(session).decide(  # type: ignore[arg-type]
+        run,
+        scope="stage",
+        target="stage-6",
+        action="acknowledge",
+        evidence={"warning_fingerprints": ["warning-1"]},
+    )
+    ReviewService(session).decide(run, scope="stage", target="stage-6", action="approve")  # type: ignore[arg-type]
+
+
 def test_release_approval_requires_waiting_stage_seven_candidate() -> None:
     session = ReviewSession()
     with pytest.raises(ValueError, match="阶段七"):

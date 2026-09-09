@@ -72,3 +72,23 @@ class ReviewService:
         report = json.loads(quality_path.read_text(encoding="utf-8"))
         if report.get("has_blockers"):
             raise ValueError("批准不能豁免真实 blocker；请提交返工")
+        warnings = report.get("unresolved_warnings", [])
+        required = {warning["fingerprint"] for warning in warnings}
+        if not required:
+            return
+        acknowledgements = self.session.scalars(
+            select(ReviewEvent).where(
+                ReviewEvent.run_id == run.id,
+                ReviewEvent.scope == "stage",
+                ReviewEvent.target == "stage-6",
+                ReviewEvent.action == "acknowledge",
+            )
+        )
+        acknowledged = {
+            fingerprint
+            for event in acknowledgements
+            for fingerprint in event.evidence.get("warning_fingerprints", [])
+        }
+        missing = required - acknowledged
+        if missing:
+            raise ValueError("进入阶段七前必须确认所有未解决的 warning")
