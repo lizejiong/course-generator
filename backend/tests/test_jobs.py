@@ -48,6 +48,8 @@ def test_infrastructure_failure_enqueues_at_most_two_checkpoint_retries() -> Non
     retry = JobService(session).fail_infrastructure(job, "network", "temporary")  # type: ignore[arg-type]
     assert retry is not None
     assert retry.run_id == run.id
+    assert run.status == "queued"
+    assert run.error_code == "network"
     final = Job(id=uuid4(), run_id=run.id, job_type="resume", attempts=3)
     session.job = final
     assert JobService(session).fail_infrastructure(final, "network", "permanent") is None  # type: ignore[arg-type]

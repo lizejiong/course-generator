@@ -68,8 +68,8 @@ class JobService:
         job.lease_owner = None
         job.lease_expires_at = None
         job.finished_at = datetime.now(UTC)
+        run = self.session.get(Run, job.run_id)
         if job.attempts > self.max_infrastructure_retries:
-            run = self.session.get(Run, job.run_id)
             if run:
                 run.status = "failed"
                 run.error_code = code
@@ -82,6 +82,10 @@ class JobService:
             available_at=datetime.now(UTC) + timedelta(seconds=2**job.attempts),
         )
         self.session.add(retry)
+        if run:
+            run.status = "queued"
+            run.error_code = code
+            run.error_summary = summary
         self.session.flush()
         return retry
 
