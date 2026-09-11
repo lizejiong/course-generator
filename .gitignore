@@ -25,6 +25,7 @@ releases/
 .agents/
 .codex/
 work/
+.worktrees/
 
 # Operating systems
 .DS_Store
