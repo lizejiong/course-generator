@@ -182,3 +182,16 @@ def test_release_api_projects_published_state_from_immutable_review_event(
     assert listing.json() == [{"version": "r0001", "status": "published"}]
     manifest = client.get(f"/api/courses/{course.id}/releases/r0001").json()
     assert manifest["status"] == "published"
+
+    page = client.get(
+        f"/api/courses/{course.id}/releases/r0001/files/site/01-intro.html"
+    )
+    assert page.status_code == 200
+    assert page.json()["path"] == "site/01-intro.html"
+    assert '<article class="lesson">' in page.json()["content"]
+    assert client.get(
+        f"/api/courses/{course.id}/releases/r0001/files/release.json"
+    ).status_code == 404
+    assert client.get(
+        f"/api/courses/{course.id}/releases/r0001/files/%2E%2E/release.json"
+    ).status_code == 404

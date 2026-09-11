@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -262,6 +263,32 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
         )
         payload["status"] = "published" if published else "rc"
         return Response(json.dumps(payload), media_type="application/json")
+
+    @router.get("/courses/{course_id}/releases/{version}/files/{path:path}")
+    def get_release_file(
+        course_id: UUID, version: str, path: str, db: Session = Depends(session)
+    ):
+        course = course_or_404(db, course_id)
+        relative = Path(path)
+        manifest_path = settings.releases_root / course.slug / version / "release.json"
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or not manifest_path.is_file()
+        ):
+            raise HTTPException(status_code=404, detail="release file not found")
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        normalized = relative.as_posix()
+        if normalized not in payload.get("files", {}):
+            raise HTTPException(status_code=404, detail="release file not found")
+        target = manifest_path.parent / relative
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="release file not found")
+        try:
+            content = target.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            raise HTTPException(status_code=404, detail="release file not found") from error
+        return {"path": normalized, "content": content}
 
     return router
 
