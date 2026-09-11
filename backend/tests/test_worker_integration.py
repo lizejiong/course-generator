@@ -1,3 +1,4 @@
+import json
 from uuid import uuid4
 
 from sqlalchemy.orm import sessionmaker
@@ -214,6 +215,36 @@ def test_stage_three_source_fragments_are_injected_into_stage_five_context_pack(
     context = runner._workspace_json(course, "workspace/context-packs/batch-01/chapter-01.json")
     assert context["source_fragments"][0]["text"] == "可追溯的来源证据。"
     assert "可追溯的来源证据。" in gateway.prompts[0]
+
+
+def test_batch_plan_uses_semantic_chapter_titles_and_stable_lesson_paths(settings, db_session) -> None:
+    course = CourseService(db_session, settings.courses_root).create(
+        "python-list-course",
+        {
+            "title": "Python 列表入门",
+            "learning_goals": ["认识列表", "使用索引访问元素"],
+            "expected_chapter_count": 2,
+        },
+    )
+    run = Run(course_id=course.id, thread_id=str(uuid4()), current_stage=4)
+    db_session.add(run)
+    db_session.flush()
+
+    WorkflowRunner(settings)._write_batches(db_session, course, run)
+
+    batch = json.loads(
+        (settings.courses_root / "python-list-course" / "workspace/batches/batch-01.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert [chapter["title"] for chapter in batch["chapters"]] == [
+        "第1章：Python 列表入门 — 认识列表",
+        "第2章：Python 列表入门 — 使用索引访问元素",
+    ]
+    assert [chapter["lesson_path"] for chapter in batch["chapters"]] == [
+        "lessons/01-chapter-1.md",
+        "lessons/02-chapter-2.md",
+    ]
 
 
 def test_semantic_payload_accepts_flat_provider_results(settings) -> None:
