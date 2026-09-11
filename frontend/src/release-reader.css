@@ -1,0 +1,19 @@
+.lesson-frame {
+  display: block;
+  width: 100%;
+  min-height: 680px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.empty-reader {
+  display: grid;
+  min-height: 320px;
+  place-items: center;
+  color: #71869e;
+}
+
+@media (max-width: 680px) {
+  .lesson-frame { min-height: 560px; }
+}
