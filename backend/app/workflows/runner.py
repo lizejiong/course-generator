@@ -481,10 +481,14 @@ class WorkflowRunner:
 
     def _humanizer_payload(self, content: str) -> dict:
         payload = self._model_json(content)
-        scores = {
-            name: int(payload["scores"][name])
-            for name in ("naturalness", "clarity", "conciseness", "teaching")
-        }
+        scores = {}
+        for name in ("naturalness", "clarity", "conciseness", "teaching"):
+            score = int(payload["scores"][name])
+            if not 0 <= score <= 100 or 1 <= score <= 5:
+                raise ValueError(
+                    f"humanizer score {name} must use the 0-to-100 scale, not 1-to-5"
+                )
+            scores[name] = score
         return {
             "markdown": str(payload["markdown"]),
             "scores": scores,

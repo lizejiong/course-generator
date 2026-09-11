@@ -1,6 +1,8 @@
 import json
 from uuid import uuid4
 
+import pytest
+
 from sqlalchemy.orm import sessionmaker
 
 from app.db.checkpoints import postgres_checkpointer
@@ -122,6 +124,16 @@ def test_model_findings_without_an_actionable_message_are_ignored() -> None:
 
     assert len(findings) == 1
     assert findings[0].message == "示例缺少预期输出"
+
+
+def test_humanizer_rejects_five_point_scores(settings) -> None:
+    content = (
+        '{"markdown":"# 章节","scores":{"naturalness":5,"clarity":5,'
+        '"conciseness":5,"teaching":5},"findings":[]}'
+    )
+
+    with pytest.raises(ValueError, match="0-to-100"):
+        WorkflowRunner(settings)._humanizer_payload(content)
 
 
 def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) -> None:
