@@ -1,3 +1,4 @@
 import { expect, test, vi } from "vitest";
-import { postReview } from "./api";
+import { postAction, postReview } from "./api";
 test("posts a review decision", async () => { globalThis.fetch = vi.fn().mockResolvedValue(new Response("{}", { status: 202 })); await postReview("run-1", { scope: "stage", target: "stage-1", action: "approve" }); expect(fetch).toHaveBeenCalledWith("/api/runs/run-1/review", expect.objectContaining({ method: "POST" })); });
+test("posts a resume action with an optional higher token limit", async () => { globalThis.fetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 })); await postAction("run-1", "resume", 200); expect(fetch).toHaveBeenCalledWith("/api/runs/run-1/actions", expect.objectContaining({ method: "POST", body: JSON.stringify({ action: "resume", scope: "run", target: "current", token_limit: 200 }) })); });

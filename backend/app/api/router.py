@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db.models import Artifact, Course, ReviewEvent, Run
-from app.schemas.api import CourseCreate, CoursePatch, FileWrite, ReviewDecision, RunCreate
+from app.schemas.api import CourseCreate, CoursePatch, FileWrite, ReviewDecision, RunAction, RunCreate
 from app.services.artifacts import ArtifactService, ArtifactWrite
 from app.services.courses import CourseService, validate_course_definition
 from app.services.invalidation import InvalidationService
@@ -128,7 +128,7 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
         return run_view(run)
 
     @router.post("/runs/{run_id}/actions")
-    def run_action(run_id: UUID, payload: ReviewDecision, db: Session = Depends(session)):
+    def run_action(run_id: UUID, payload: RunAction, db: Session = Depends(session)):
         run = db.get(Run, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="run not found")
@@ -138,7 +138,23 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
         if payload.action == "stop":
             JobService(db).request_safe_stop(run)
             return run_view(run)
-        raise HTTPException(status_code=422, detail="action must be pause or stop")
+        if payload.action == "resume":
+            if run.status != "paused":
+                raise HTTPException(status_code=409, detail="only paused runs can resume")
+            if payload.token_limit is not None:
+                if payload.token_limit <= run.token_usage:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="resume token_limit must be greater than current token usage",
+                    )
+                run.token_limit = payload.token_limit
+            run.pause_requested = False
+            run.error_code = None
+            run.error_summary = None
+            run.status = "queued"
+            JobService(db).enqueue(run, "resume")
+            return run_view(run)
+        raise HTTPException(status_code=422, detail="action must be pause, stop, or resume")
 
     @router.get("/runs/{run_id}/review")
     def review_events(run_id: UUID, db: Session = Depends(session)):

@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from app.db.models import Run
+from app.db.models import Job, Run
 from app.main import create_app
 from app.services.courses import CourseService
 from app.services.releases import ReleaseService
@@ -76,6 +76,60 @@ def test_course_archive_and_restore_are_non_destructive(settings, db_session) ->
     restored = client.post(f"/api/courses/{course['id']}/restore")
     assert archived.json()["archived"] is True
     assert restored.json()["archived"] is False
+
+
+def test_resume_paused_run_requeues_job_and_can_raise_budget(settings, db_session) -> None:
+    client = TestClient(create_app(settings))
+    course = client.post(
+        "/api/courses", json={"slug": "resume-course", "definition": definition()}
+    ).json()
+    run = client.post(f"/api/courses/{course['id']}/runs", json={"token_limit": 100}).json()
+    paused = db_session.get(Run, run["id"])
+    assert paused is not None
+    paused.current_stage = 5
+    paused.status = "paused"
+    paused.pause_requested = True
+    paused.token_usage = 100
+    paused.error_code = "token_budget_pause"
+    paused.error_summary = "budget exhausted"
+    original_job = db_session.query(Job).filter_by(run_id=paused.id, status="queued").one()
+    original_job.status = "succeeded"
+    db_session.commit()
+
+    response = client.post(
+        f"/api/runs/{run['id']}/actions",
+        json={"scope": "run", "target": "current", "action": "resume", "token_limit": 200},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    assert response.json()["token_limit"] == 200
+    assert response.json()["pause_requested"] is False
+    assert response.json()["error_code"] is None
+
+
+def test_resume_requires_paused_status_and_higher_budget(settings, db_session) -> None:
+    client = TestClient(create_app(settings))
+    course = client.post(
+        "/api/courses", json={"slug": "resume-invalid-course", "definition": definition()}
+    ).json()
+    run = client.post(f"/api/courses/{course['id']}/runs", json={"token_limit": 100}).json()
+
+    non_paused = client.post(
+        f"/api/runs/{run['id']}/actions",
+        json={"scope": "run", "target": "current", "action": "resume"},
+    )
+    assert non_paused.status_code == 409
+    paused = db_session.get(Run, run["id"])
+    assert paused is not None
+    paused.status = "paused"
+    paused.token_usage = 100
+    db_session.commit()
+    too_low = client.post(
+        f"/api/runs/{run['id']}/actions",
+        json={"scope": "run", "target": "current", "action": "resume", "token_limit": 100},
+    )
+    assert too_low.status_code == 422
 
 
 def test_course_create_rejects_unknown_source_policy(settings, db_session) -> None:
