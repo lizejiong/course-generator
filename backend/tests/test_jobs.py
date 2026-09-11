@@ -81,6 +81,9 @@ def test_worker_stop_request_wins_over_waiting_human_outcome() -> None:
         def get(self, model, value):
             return job if model is Job else run
 
+        def expire(self, instance, attribute_names=None) -> None:
+            pass
+
     class Factory:
         def __init__(self, session):
             self.session = session

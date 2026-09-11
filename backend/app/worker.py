@@ -34,6 +34,7 @@ class Worker:
                 outcome = self.execute(job)
                 run = session.get(Run, job.run_id)
                 assert run is not None
+                session.expire(run, ["pause_requested", "stop_requested"])
                 jobs = JobService(session)
                 if run.stop_requested or outcome == "stopped":
                     run.status = "stopped"
