@@ -16,7 +16,7 @@ export const createCourse = (body: { slug: string; definition: Definition }) => 
 export const createRun = (courseId: string, token_limit?: number) => request<Run>(`/api/courses/${courseId}/runs`, { method: "POST", body: JSON.stringify({ token_limit }) });
 export const getRun = (id: string) => request<Run>(`/api/runs/${id}`);
 export const postReview = (id: string, body: ReviewDecision) => request(`/api/runs/${id}/review`, { method: "POST", body: JSON.stringify(body) });
-export const postAction = (id: string, action: "pause" | "stop") => request<Run>(`/api/runs/${id}/actions`, { method: "POST", body: JSON.stringify({ action, scope: "run", target: "current" }) });
+export const postAction = (id: string, action: "pause" | "stop" | "resume", tokenLimit?: number) => request<Run>(`/api/runs/${id}/actions`, { method: "POST", body: JSON.stringify({ action, scope: "run", target: "current", ...(tokenLimit ? { token_limit: tokenLimit } : {}) }) });
 export const listReleases = (id: string) => request<Release[]>(`/api/courses/${id}/releases`);
 export const getRelease = (id: string, version: string) => request<Record<string, unknown>>(`/api/courses/${id}/releases/${version}`);
 export const listArtifacts = (id: string) => request<Artifact[]>(`/api/courses/${id}/artifacts`);
