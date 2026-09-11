@@ -1,3 +1,4 @@
+import json
 from uuid import uuid4
 
 from sqlalchemy.orm import sessionmaker
@@ -111,6 +112,18 @@ class SchemaRepairGateway(ScriptedGateway):
         return ModelResult(next(self.responses), 1, 1, "test-model")
 
 
+def test_model_findings_without_an_actionable_message_are_ignored() -> None:
+    findings = WorkflowRunner._findings(
+        [
+            {"excerpt": "模型仅回显了原文，没有说明问题"},
+            {"message": "示例缺少预期输出", "fix": "补充输出说明"},
+        ]
+    )
+
+    assert len(findings) == 1
+    assert findings[0].message == "示例缺少预期输出"
+
+
 def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) -> None:
     course = CourseService(db_session, settings.courses_root).create(
         "quality-course", {"min_effective_chars_per_chapter": 1}
@@ -214,6 +227,36 @@ def test_stage_three_source_fragments_are_injected_into_stage_five_context_pack(
     context = runner._workspace_json(course, "workspace/context-packs/batch-01/chapter-01.json")
     assert context["source_fragments"][0]["text"] == "可追溯的来源证据。"
     assert "可追溯的来源证据。" in gateway.prompts[0]
+
+
+def test_batch_plan_uses_semantic_chapter_titles_and_stable_lesson_paths(settings, db_session) -> None:
+    course = CourseService(db_session, settings.courses_root).create(
+        "python-list-course",
+        {
+            "title": "Python 列表入门",
+            "learning_goals": ["认识列表", "使用索引访问元素"],
+            "expected_chapter_count": 2,
+        },
+    )
+    run = Run(course_id=course.id, thread_id=str(uuid4()), current_stage=4)
+    db_session.add(run)
+    db_session.flush()
+
+    WorkflowRunner(settings)._write_batches(db_session, course, run)
+
+    batch = json.loads(
+        (settings.courses_root / "python-list-course" / "workspace/batches/batch-01.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert [chapter["title"] for chapter in batch["chapters"]] == [
+        "第1章：Python 列表入门 — 认识列表",
+        "第2章：Python 列表入门 — 使用索引访问元素",
+    ]
+    assert [chapter["lesson_path"] for chapter in batch["chapters"]] == [
+        "lessons/01-chapter-1.md",
+        "lessons/02-chapter-2.md",
+    ]
 
 
 def test_semantic_payload_accepts_flat_provider_results(settings) -> None:

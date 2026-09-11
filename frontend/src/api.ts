@@ -13,6 +13,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const listCourses = () => request<Course[]>("/api/courses");
 export const getCourse = (id: string) => request<Course>(`/api/courses/${id}`);
 export const createCourse = (body: { slug: string; definition: Definition }) => request<Course>("/api/courses", { method: "POST", body: JSON.stringify(body) });
+export const listRuns = (courseId: string) => request<Run[]>(`/api/courses/${courseId}/runs`);
 export const createRun = (courseId: string, token_limit?: number) => request<Run>(`/api/courses/${courseId}/runs`, { method: "POST", body: JSON.stringify({ token_limit }) });
 export const getRun = (id: string) => request<Run>(`/api/runs/${id}`);
 export const postReview = (id: string, body: ReviewDecision) => request(`/api/runs/${id}/review`, { method: "POST", body: JSON.stringify(body) });

@@ -82,6 +82,8 @@ docker compose exec postgres createdb -U course_generator course_generator_test
 - LangGraph + PostgreSQL Checkpoint
 - PostgreSQL jobs 队列，不引入 Redis
 - React + TypeScript + Vite
+- 运行续接：课程详情会显示最近一次运行；“重新生成”会创建独立的新运行。
+- 语义化章节：新课程的蓝图会写入章节标题，发布阅读器优先显示该标题；旧制品安全回退为文件名。
 - Markdown 正文与不可变发布包
 - 人工参与关键审核与最终发布
 

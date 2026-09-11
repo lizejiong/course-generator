@@ -171,6 +171,39 @@ class WorkflowRunner:
             course
         )
 
+    def _chapter_plan(self, course: Course) -> list[dict]:
+        definition = self._definition(course)
+        course_title = str(definition.get("title") or course.slug).strip()
+        goals = [
+            str(goal).strip()
+            for goal in definition.get("learning_goals", [])
+            if str(goal).strip()
+        ]
+        count = int(definition.get("expected_chapter_count", 1))
+        return [
+            {
+                "id": f"chapter-{number}",
+                "number": number,
+                "title": self._chapter_title(course_title, goals, number),
+                "lesson_path": f"lessons/{number:02d}-chapter-{number}.md",
+            }
+            for number in range(1, count + 1)
+        ]
+
+    @staticmethod
+    def _chapter_title(course_title: str, goals: list[str], number: int) -> str:
+        focus = goals[(number - 1) % len(goals)] if goals else course_title
+        if focus == course_title:
+            return f"第{number}章：{course_title}"
+        return f"第{number}章：{course_title} — {focus}"
+
+    @staticmethod
+    def _chapter_lesson_path(course: Course, chapter: dict) -> str:
+        return str(
+            chapter.get("lesson_path")
+            or f"lessons/{int(chapter['number']):02d}-{course.slug}.md"
+        )
+
     @staticmethod
     def _session_for(course: Course) -> Session:
         session = object_session(course)
@@ -196,11 +229,7 @@ class WorkflowRunner:
 
     def _write_blueprint(self, session: Session, course: Course, run: Run) -> None:
         definition = self._definition(course)
-        count = int(definition.get("expected_chapter_count", 1))
-        chapters = [
-            {"id": f"chapter-{number}", "number": number, "title": f"Chapter {number}"}
-            for number in range(1, count + 1)
-        ]
+        chapters = self._chapter_plan(course)
         resources = list(definition.get("resources", []))
         source_policy = definition.get("source_policy", "internal_only")
         if source_policy != "internal_only":
@@ -246,10 +275,7 @@ class WorkflowRunner:
 
     def _write_batches(self, session: Session, course: Course, run: Run) -> None:
         definition = self._definition(course)
-        chapters = [
-            {"id": f"chapter-{number}", "number": number, "title": f"Chapter {number}"}
-            for number in range(1, int(definition.get("expected_chapter_count", 1)) + 1)
-        ]
+        chapters = self._chapter_plan(course)
         index_path = Path(course.workspace_path) / "workspace/source-index.json"
         source_index = (
             json.loads(index_path.read_text(encoding="utf-8")) if index_path.is_file() else {}
@@ -291,7 +317,7 @@ class WorkflowRunner:
                 writing_constraints=["include a clear explanation, example, and exercise"],
             )
             context = ContextPackService(ArtifactService(session)).build(course, run.id, pack)
-            path = f"lessons/{chapter['number']:02d}-{course.slug}.md"
+            path = self._chapter_lesson_path(course, chapter)
             context_content = Path(context.storage_path).read_text(encoding="utf-8")
             if not self._chapter_quality_cycle(
                 session, course, run, gateway, chapter, context_content, path
@@ -541,16 +567,22 @@ class WorkflowRunner:
 
     @staticmethod
     def _findings(values: list[dict]) -> list[Finding]:
-        return [
-            Finding(
-                str(value.get("rule", "model_finding")),
-                str(value.get("location", "unknown")),
-                str(value.get("message", "")),
-                str(value.get("excerpt", "")),
-                str(value.get("fix", "")),
+        findings: list[Finding] = []
+        for value in values:
+            message = str(value.get("message", "")).strip()
+            fix = str(value.get("fix", "")).strip()
+            if not message and not fix:
+                continue
+            findings.append(
+                Finding(
+                    str(value.get("rule", "model_finding")),
+                    str(value.get("location", "unknown")),
+                    message,
+                    str(value.get("excerpt", "")),
+                    fix,
+                )
             )
-            for value in values
-        ]
+        return findings
 
     def _write_quality_evidence(self, session, course, run, chapter, round_no, results) -> None:
         self._write_json_artifact(
@@ -574,7 +606,7 @@ class WorkflowRunner:
         repair_targets: list[str] = []
         titles: dict[str, list[str]] = {}
         for chapter in batch["chapters"]:
-            path = Path(course.workspace_path) / f"lessons/{chapter['number']:02d}-{course.slug}.md"
+            path = Path(course.workspace_path) / self._chapter_lesson_path(course, chapter)
             if not path.is_file():
                 has_blockers = True
                 repair_targets.append(chapter["id"])
