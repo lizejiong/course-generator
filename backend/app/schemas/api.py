@@ -25,5 +25,12 @@ class ReviewDecision(BaseModel):
     related_revision: int | None = None
 
 
+class RunAction(BaseModel):
+    scope: str
+    target: str
+    action: str
+    token_limit: int | None = Field(default=None, ge=1)
+
+
 class FileWrite(BaseModel):
     content: str
