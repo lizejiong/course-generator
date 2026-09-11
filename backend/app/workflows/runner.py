@@ -27,6 +27,10 @@ from app.services.source_snapshots import SourceSnapshotService
 from app.workflows.graph import build_stage_graph
 
 
+class ModelOutputInvalid(ValueError):
+    """A model response remained invalid after one schema repair attempt."""
+
+
 class WorkflowRunner:
     """Execute one durable stage command; no workflow cursor is stored in jobs."""
 
@@ -288,14 +292,15 @@ class WorkflowRunner:
             )
             context = ContextPackService(ArtifactService(session)).build(course, run.id, pack)
             path = f"lessons/{chapter['number']:02d}-{course.slug}.md"
+            context_content = Path(context.storage_path).read_text(encoding="utf-8")
             if not self._chapter_quality_cycle(
-                session, course, run, gateway, chapter, context.id, path
+                session, course, run, gateway, chapter, context_content, path
             ):
                 return False
         return True
 
     def _chapter_quality_cycle(
-        self, session, course, run, gateway, chapter, context_id, path
+        self, session, course, run, gateway, chapter, context_content, path
     ) -> bool:
         minimum = int(self._definition(course).get("min_effective_chars_per_chapter", 1))
         prior_fingerprints: list[str] = []
@@ -305,7 +310,7 @@ class WorkflowRunner:
                 "chapter_writer",
                 skill="instructional-writer",
                 title=chapter["title"],
-                context_id=context_id,
+                context_content=context_content,
                 repair_evidence="; ".join(evidence),
             )
             draft_content, artifact = self._cached_model_output(
@@ -390,7 +395,10 @@ class WorkflowRunner:
                 logical_path=path,
                 round_no=round_no,
             )
-            return self._humanizer_payload(content), artifact
+            try:
+                return self._humanizer_payload(content), artifact
+            except (KeyError, TypeError, ValueError) as error:
+                raise ModelOutputInvalid("humanizer returned invalid structured output") from error
 
     def _semantic_review(
         self,
@@ -429,7 +437,10 @@ class WorkflowRunner:
                 logical_path=f"workspace/quality/{chapter_id}-round-{round_no}-semantic.json",
                 round_no=round_no,
             )
-            payload = self._semantic_payload(content)
+            try:
+                payload = self._semantic_payload(content)
+            except (KeyError, TypeError, ValueError) as error:
+                raise ModelOutputInvalid("semantic reviewer returned invalid structured output") from error
         outcomes = {
             name: payload["outcomes"][name]
             for name in ("facts_sources", "goals_scope", "teaching", "logic_continuity")
@@ -456,10 +467,17 @@ class WorkflowRunner:
 
     def _semantic_payload(self, content: str) -> dict:
         payload = self._model_json(content)
-        outcomes = payload["outcomes"]
         required = ("facts_sources", "goals_scope", "teaching", "logic_continuity")
+        if "outcomes" not in payload and all(name in payload for name in required):
+            payload = {
+                "outcomes": {name: payload[name] for name in required},
+                "findings": payload.get("findings", []),
+            }
+        outcomes = payload.get("outcomes")
         if not isinstance(outcomes, dict) or any(name not in outcomes for name in required):
             raise ValueError("语义审校没有返回全部必需结果")
+        if any(outcomes[name] not in {"pass", "warning", "blocker"} for name in required):
+            raise ValueError("语义审校返回了不支持的结果状态")
         return payload
 
     def _cached_model_output(

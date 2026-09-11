@@ -3,13 +3,13 @@ from uuid import uuid4
 from sqlalchemy.orm import sessionmaker
 
 from app.db.checkpoints import postgres_checkpointer
-from app.db.models import Run
+from app.db.models import Job, Run
 from app.services.courses import CourseService
 from app.services.jobs import JobService
 from app.services.models import ModelResult
 from app.services.reviews import ReviewService
 from app.worker import Worker
-from app.workflows.runner import WorkflowRunner
+from app.workflows.runner import ModelOutputInvalid, WorkflowRunner
 
 
 def test_worker_persists_stage_artifact_waits_for_human_then_resumes(settings, db_session) -> None:
@@ -78,6 +78,16 @@ class CountingGateway(ScriptedGateway):
 
     def complete(self, *args, **kwargs) -> ModelResult:
         self.calls += 1
+        return super().complete(*args, **kwargs)
+
+
+class PromptCapturingGateway(ScriptedGateway):
+    def __init__(self) -> None:
+        super().__init__()
+        self.prompts: list[str] = []
+
+    def complete(self, *args, **kwargs) -> ModelResult:
+        self.prompts.append(kwargs["prompt"])
         return super().complete(*args, **kwargs)
 
 
@@ -198,10 +208,20 @@ def test_stage_three_source_fragments_are_injected_into_stage_five_context_pack(
     run.current_stage = 4
     runner._write_batches(db_session, course, run)
     run.current_stage = 5
-    monkeypatch.setattr("app.workflows.runner.ModelGateway", lambda settings: ScriptedGateway())
+    gateway = PromptCapturingGateway()
+    monkeypatch.setattr("app.workflows.runner.ModelGateway", lambda settings: gateway)
     assert runner._produce_chapters(db_session, course, run)
     context = runner._workspace_json(course, "workspace/context-packs/batch-01/chapter-01.json")
     assert context["source_fragments"][0]["text"] == "可追溯的来源证据。"
+    assert "可追溯的来源证据。" in gateway.prompts[0]
+
+
+def test_semantic_payload_accepts_flat_provider_results(settings) -> None:
+    payload = WorkflowRunner(settings)._semantic_payload(
+        '{"facts_sources":"pass","goals_scope":"pass",'
+        '"teaching":"pass","logic_continuity":"pass","findings":[]}'
+    )
+    assert payload["outcomes"]["teaching"] == "pass"
 
 
 def test_batch_plan_has_parseable_context_scope_and_course_quality_detects_missing_lessons(
@@ -298,3 +318,23 @@ def test_worker_completes_all_seven_stages_with_human_approvals(
     with factory.begin() as session:
         persisted = session.get(Run, run.id)
         assert persisted and persisted.status == "completed"
+
+
+def test_invalid_model_schema_does_not_retry(settings, db_session) -> None:
+    course = CourseService(db_session, settings.courses_root).create("invalid-model-course", {})
+    run = Run(course_id=course.id, thread_id=str(uuid4()))
+    db_session.add(run)
+    db_session.flush()
+    JobService(db_session).enqueue(run, "start")
+    db_session.commit()
+    factory = sessionmaker(db_session.bind, expire_on_commit=False)
+
+    def invalid_model_output(_):
+        raise ModelOutputInvalid("semantic output is not valid")
+
+    assert Worker(factory, "test-worker", invalid_model_output).run_once()
+    with factory.begin() as session:
+        persisted = session.get(Run, run.id)
+        assert persisted and persisted.status == "failed"
+        assert persisted.error_code == "model_output_invalid"
+        assert session.query(Job).filter_by(run_id=run.id).count() == 1

@@ -6,7 +6,7 @@ def test_prompt_content_and_generic_skill_are_versioned_from_repository_files() 
         "chapter_writer",
         skill="instructional-writer",
         title="Testing",
-        context_id="artifact-id",
+        context_content='{"chapter_id":"chapter-1"}',
         repair_evidence="none",
     )
     assert "Testing" in prompt.content
