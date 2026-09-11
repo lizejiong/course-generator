@@ -10,7 +10,7 @@ from app.db import models  # noqa: F401
 from app.db.base import Base
 
 TEST_DATABASE_URL = (
-    "postgresql+psycopg://course_generator:course_generator@localhost:5433/course_generator"
+    "postgresql+psycopg://course_generator:course_generator@localhost:5433/course_generator_test"
 )
 os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 
