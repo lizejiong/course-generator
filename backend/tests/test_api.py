@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -76,6 +77,24 @@ def test_course_archive_and_restore_are_non_destructive(settings, db_session) ->
     restored = client.post(f"/api/courses/{course['id']}/restore")
     assert archived.json()["archived"] is True
     assert restored.json()["archived"] is False
+
+
+def test_course_runs_are_listed_newest_first(settings, db_session) -> None:
+    client = TestClient(create_app(settings))
+    course = client.post(
+        "/api/courses", json={"slug": "run-history-course", "definition": definition()}
+    ).json()
+    older = client.post(f"/api/courses/{course['id']}/runs", json={}).json()
+    newer = client.post(f"/api/courses/{course['id']}/runs", json={}).json()
+    db_session.get(Run, older["id"]).updated_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.get(Run, newer["id"]).updated_at = datetime.now(UTC)
+    db_session.commit()
+
+    response = client.get(f"/api/courses/{course['id']}/runs")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [newer["id"], older["id"]]
+    assert {"id", "status", "stage", "updated_at"} <= response.json()[0].keys()
 
 
 def test_resume_paused_run_requeues_job_and_can_raise_budget(settings, db_session) -> None:

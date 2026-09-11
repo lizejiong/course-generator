@@ -111,6 +111,16 @@ def build_router(settings: Settings, session_factory) -> APIRouter:
         course.archived_at = None
         return {"id": str(course.id), "archived": False}
 
+    @router.get("/courses/{course_id}/runs")
+    def list_runs(course_id: UUID, db: Session = Depends(session)):
+        course_or_404(db, course_id)
+        statement = (
+            select(Run)
+            .where(Run.course_id == course_id)
+            .order_by(Run.updated_at.desc(), Run.created_at.desc())
+        )
+        return [run_view(run) for run in db.scalars(statement)]
+
     @router.post("/courses/{course_id}/runs", status_code=status.HTTP_202_ACCEPTED)
     def create_run(course_id: UUID, payload: RunCreate, db: Session = Depends(session)):
         course_or_404(db, course_id)
