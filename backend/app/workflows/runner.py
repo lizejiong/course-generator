@@ -567,16 +567,22 @@ class WorkflowRunner:
 
     @staticmethod
     def _findings(values: list[dict]) -> list[Finding]:
-        return [
-            Finding(
-                str(value.get("rule", "model_finding")),
-                str(value.get("location", "unknown")),
-                str(value.get("message", "")),
-                str(value.get("excerpt", "")),
-                str(value.get("fix", "")),
+        findings: list[Finding] = []
+        for value in values:
+            message = str(value.get("message", "")).strip()
+            fix = str(value.get("fix", "")).strip()
+            if not message and not fix:
+                continue
+            findings.append(
+                Finding(
+                    str(value.get("rule", "model_finding")),
+                    str(value.get("location", "unknown")),
+                    message,
+                    str(value.get("excerpt", "")),
+                    fix,
+                )
             )
-            for value in values
-        ]
+        return findings
 
     def _write_quality_evidence(self, session, course, run, chapter, round_no, results) -> None:
         self._write_json_artifact(

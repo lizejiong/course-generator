@@ -112,6 +112,18 @@ class SchemaRepairGateway(ScriptedGateway):
         return ModelResult(next(self.responses), 1, 1, "test-model")
 
 
+def test_model_findings_without_an_actionable_message_are_ignored() -> None:
+    findings = WorkflowRunner._findings(
+        [
+            {"excerpt": "模型仅回显了原文，没有说明问题"},
+            {"message": "示例缺少预期输出", "fix": "补充输出说明"},
+        ]
+    )
+
+    assert len(findings) == 1
+    assert findings[0].message == "示例缺少预期输出"
+
+
 def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) -> None:
     course = CourseService(db_session, settings.courses_root).create(
         "quality-course", {"min_effective_chars_per_chapter": 1}
