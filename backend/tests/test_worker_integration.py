@@ -3,13 +3,13 @@ from uuid import uuid4
 from sqlalchemy.orm import sessionmaker
 
 from app.db.checkpoints import postgres_checkpointer
-from app.db.models import Run
+from app.db.models import Job, Run
 from app.services.courses import CourseService
 from app.services.jobs import JobService
 from app.services.models import ModelResult
 from app.services.reviews import ReviewService
 from app.worker import Worker
-from app.workflows.runner import WorkflowRunner
+from app.workflows.runner import ModelOutputInvalid, WorkflowRunner
 
 
 def test_worker_persists_stage_artifact_waits_for_human_then_resumes(settings, db_session) -> None:
@@ -318,3 +318,23 @@ def test_worker_completes_all_seven_stages_with_human_approvals(
     with factory.begin() as session:
         persisted = session.get(Run, run.id)
         assert persisted and persisted.status == "completed"
+
+
+def test_invalid_model_schema_does_not_retry(settings, db_session) -> None:
+    course = CourseService(db_session, settings.courses_root).create("invalid-model-course", {})
+    run = Run(course_id=course.id, thread_id=str(uuid4()))
+    db_session.add(run)
+    db_session.flush()
+    JobService(db_session).enqueue(run, "start")
+    db_session.commit()
+    factory = sessionmaker(db_session.bind, expire_on_commit=False)
+
+    def invalid_model_output(_):
+        raise ModelOutputInvalid("semantic output is not valid")
+
+    assert Worker(factory, "test-worker", invalid_model_output).run_once()
+    with factory.begin() as session:
+        persisted = session.get(Run, run.id)
+        assert persisted and persisted.status == "failed"
+        assert persisted.error_code == "model_output_invalid"
+        assert session.query(Job).filter_by(run_id=run.id).count() == 1

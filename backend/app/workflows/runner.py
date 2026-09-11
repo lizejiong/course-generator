@@ -27,6 +27,10 @@ from app.services.source_snapshots import SourceSnapshotService
 from app.workflows.graph import build_stage_graph
 
 
+class ModelOutputInvalid(ValueError):
+    """A model response remained invalid after one schema repair attempt."""
+
+
 class WorkflowRunner:
     """Execute one durable stage command; no workflow cursor is stored in jobs."""
 
@@ -391,7 +395,10 @@ class WorkflowRunner:
                 logical_path=path,
                 round_no=round_no,
             )
-            return self._humanizer_payload(content), artifact
+            try:
+                return self._humanizer_payload(content), artifact
+            except (KeyError, TypeError, ValueError) as error:
+                raise ModelOutputInvalid("humanizer returned invalid structured output") from error
 
     def _semantic_review(
         self,
@@ -430,7 +437,10 @@ class WorkflowRunner:
                 logical_path=f"workspace/quality/{chapter_id}-round-{round_no}-semantic.json",
                 round_no=round_no,
             )
-            payload = self._semantic_payload(content)
+            try:
+                payload = self._semantic_payload(content)
+            except (KeyError, TypeError, ValueError) as error:
+                raise ModelOutputInvalid("semantic reviewer returned invalid structured output") from error
         outcomes = {
             name: payload["outcomes"][name]
             for name in ("facts_sources", "goals_scope", "teaching", "logic_continuity")

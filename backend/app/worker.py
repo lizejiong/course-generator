@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Job, Run
 from app.services.jobs import JobService
+from app.workflows.runner import ModelOutputInvalid
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,13 @@ class Worker:
                     jobs.succeed(job)
                 else:
                     jobs.succeed(job)
+            return True
+        except ModelOutputInvalid as error:
+            logger.warning("model output rejected", extra={"job_id": str(job_id)})
+            with self.session_factory.begin() as session:
+                failed = session.get(Job, job_id)
+                assert failed is not None
+                JobService(session).fail_business(failed, "model_output_invalid", str(error))
             return True
         except Exception as error:  # Worker owns infrastructure retries, never business routing.
             logger.exception("job execution failed", extra={"job_id": str(job_id)})
