@@ -60,6 +60,12 @@ pnpm --dir frontend test
 pnpm --dir frontend build
 ```
 
+测试默认连接独立的 `course_generator_test` 数据库（端口仍为 `5433`），不会清理本地运行使用的 `course_generator` 数据库。首次运行测试前，可执行：
+
+```powershell
+docker compose exec postgres createdb -U course_generator course_generator_test
+```
+
 真实 OpenAI 兼容模型和可选 Tavily 的人工验收、环境变量与最小课程操作步骤见 [真实外部服务人工验收手册](outputs/external-service-manual-acceptance.md)。密钥仅应保存在本机 `.env`，不得提交。
 
 ## 文档
