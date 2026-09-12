@@ -156,6 +156,10 @@ def test_chapter_cycle_persists_all_three_gate_evidence(settings, db_session) ->
     assert passed
     evidence = settings.courses_root / "quality-course" / "workspace" / "quality"
     assert (evidence / "chapter-1-round-1.json").is_file()
+    lesson_path = settings.courses_root / "quality-course" / "lessons" / "01-quality-course.md"
+    lesson = lesson_path.read_text(encoding="utf-8")
+    assert lesson == "# Chapter\n\nA clear lesson with an example and exercise."
+    assert not lesson.lstrip().startswith('{"markdown"')
 
 
 def test_chapter_cycle_reuses_durable_model_outputs_after_a_retry(settings, db_session) -> None:

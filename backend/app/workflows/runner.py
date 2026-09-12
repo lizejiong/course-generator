@@ -396,7 +396,7 @@ class WorkflowRunner:
         prompt = render_prompt(
             "natural_language_editor", skill="natural-language-editor", markdown=markdown
         )
-        content, artifact = self._cached_model_output(
+        content, _ = self._cached_model_output(
             session,
             course,
             run,
@@ -408,9 +408,11 @@ class WorkflowRunner:
             round_no=round_no,
         )
         try:
-            return self._humanizer_payload(content), artifact
+            return self._persist_humanized_markdown(
+                session, course, run, path, round_no, self._humanizer_payload(content)
+            )
         except (KeyError, TypeError, ValueError):
-            content, artifact = self._cached_model_output(
+            content, _ = self._cached_model_output(
                 session,
                 course,
                 run,
@@ -422,9 +424,27 @@ class WorkflowRunner:
                 round_no=round_no,
             )
             try:
-                return self._humanizer_payload(content), artifact
+                return self._persist_humanized_markdown(
+                    session, course, run, path, round_no, self._humanizer_payload(content)
+                )
             except (KeyError, TypeError, ValueError) as error:
                 raise ModelOutputInvalid("humanizer returned invalid structured output") from error
+
+    def _persist_humanized_markdown(
+        self, session, course, run, path: str, round_no: int, payload: dict
+    ):
+        """Make the chapter view Markdown while preserving raw model JSON as an artifact."""
+        markdown = payload["markdown"]
+        artifact = self._write_artifact(
+            session,
+            course,
+            run,
+            "humanized_markdown",
+            path,
+            markdown.encode("utf-8"),
+            round_no,
+        )
+        return payload, artifact
 
     def _semantic_review(
         self,
