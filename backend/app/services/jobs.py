@@ -79,6 +79,7 @@ class JobService:
             run_id=job.run_id,
             job_type=job.job_type,
             input_event_id=job.input_event_id,
+            attempts=job.attempts,
             available_at=datetime.now(UTC) + timedelta(seconds=2**job.attempts),
         )
         self.session.add(retry)
