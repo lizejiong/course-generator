@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { Artifact, Course, Definition, createCourse, createRun, getCourse, getFile, getRelease, getRun, listArtifacts, listCourses, listReleases, listRuns, postAction, postReview, putFile } from "./api";
 import { STAGES, stageMeta } from "./stages";
+import { artifactsForStage } from "./workbenchArtifacts";
 import { ReleaseReader } from "./ReleaseReader";
 import "./styles.css";
 
@@ -27,7 +28,105 @@ function NewCourse() { const nav = useNavigate(); const client = useQueryClient(
 
 function CourseDetail() { const { courseId = "" } = useParams(); const nav = useNavigate(); const course = useQuery({ queryKey: ["course", courseId], queryFn: () => getCourse(courseId) }); const releases = useQuery({ queryKey: ["releases", courseId], queryFn: () => listReleases(courseId) }); const runs = useQuery({ queryKey: ["runs", courseId], queryFn: () => listRuns(courseId) }); const run = useMutation({ mutationFn: () => createRun(courseId, course.data?.definition.token_limit), onSuccess: (result) => { queryClient.invalidateQueries({ queryKey: ["runs", courseId] }); nav(`/courses/${courseId}/runs/${result.id}`); } }); const published = releases.data?.find((item) => item.status === "published"); const latestRun = runs.data?.[0]; const resumable = latestRun && ["queued", "running", "waiting_human", "paused"].includes(latestRun.status); const queryClient = useQueryClient(); return <Shell><main className="detail-page"><Link to="/">← {t.back}</Link>{course.data && <section className="detail-card"><p className="eyebrow">{"\u8bfe\u7a0b\u5b9a\u4e49"}</p><h1>{course.data.definition.title}</h1><p>{course.data.definition.audience}</p><div className="definition-grid"><div><small>{"\u5b66\u4e60\u76ee\u6807"}</small><ul>{course.data.definition.learning_goals.map((goal) => <li key={goal}>{goal}</li>)}</ul></div><div><small>{"\u751f\u4ea7\u7ea6\u675f"}</small><p>{course.data.definition.expected_chapter_count} {"\u7ae0 · \u6700\u4f4e"} {course.data.definition.min_effective_chars_per_chapter} {"\u5b57 · "}{course.data.definition.source_policy}</p></div></div><div className="actions">{latestRun && <Link className="btn primary" to={`/courses/${courseId}/runs/${latestRun.id}`}>{resumable ? "继续最近运行" : "查看最近运行"} →</Link>}<button className="btn" onClick={() => run.mutate()} disabled={run.isPending}>{run.isPending ? "正在创建…" : "重新生成"}</button>{published && <Link className="btn" to={`/courses/${courseId}/releases/${published.version}`}>{t.reader}</Link>}</div><ErrorText value={runs.error}/><ErrorText value={run.error}/></section>}</main></Shell>; }
 
-function Workbench() { const { courseId = "", runId = "" } = useParams(); const client = useQueryClient(); const run = useQuery({ queryKey: ["run", runId], queryFn: () => getRun(runId), refetchInterval: (query) => running(query.state.data?.status) ? 2000 : false }); const course = useQuery({ queryKey: ["course", courseId], queryFn: () => getCourse(courseId) }); const artifacts = useQuery({ queryKey: ["artifacts", courseId], queryFn: () => listArtifacts(courseId), refetchInterval: running(run.data?.status) ? 2000 : false }); const releases = useQuery({ queryKey: ["releases", courseId], queryFn: () => listReleases(courseId) }); const files = latestArtifacts(artifacts.data ?? []); const [selected, setSelected] = useState<string>(); const current = selected ?? initialFile(run.data?.stage ?? null, files); const file = useQuery({ queryKey: ["file", courseId, current], queryFn: () => getFile(courseId, current!), enabled: Boolean(current && editable(current)) }); const [editing, setEditing] = useState(false); const [draft, setDraft] = useState(""); useEffect(() => { setEditing(false); }, [current]); const save = useMutation({ mutationFn: () => putFile(courseId, current!, draft), onSuccess: () => { setEditing(false); client.invalidateQueries({ queryKey: ["file", courseId, current] }); client.invalidateQueries({ queryKey: ["artifacts", courseId] }); } }); const refresh = () => { client.invalidateQueries({ queryKey: ["run", runId] }); client.invalidateQueries({ queryKey: ["artifacts", courseId] }); client.invalidateQueries({ queryKey: ["releases", courseId] }); }; const review = useMutation({ mutationFn: (action: string) => { const data = run.data!; const release = releases.data?.find((item) => item.status === "rc"); return postReview(runId, { scope: data.stage === 7 ? "release" : "stage", target: data.stage === 7 ? release?.version ?? "r0001" : `stage-${data.stage}`, action, evidence: {} }); }, onSuccess: refresh }); const action = useMutation({ mutationFn: (kind: "pause" | "stop") => postAction(runId, kind), onSuccess: refresh }); const data = run.data; const completed = data?.status === "completed"; if (!data) return <Shell><main>{"\u6b63\u5728\u8bfb\u53d6\u8fd0\u884c\u2026"}<ErrorText value={run.error}/></main></Shell>; return <Shell><div className="workbench-head"><div><Link to={`/courses/${courseId}`}>←</Link><strong>{course.data?.definition.title ?? "\u8bfe\u7a0b\u5de5\u4f5c\u53f0"}</strong><Chip status={data.status}/></div><div className="run-summary"><span>Token {data.token_usage} / {data.token_limit ?? "∞"}</span><button className="btn" onClick={() => action.mutate("pause")} disabled={!running(data.status)}>{t.pause}</button><button className="btn danger" onClick={() => action.mutate("stop")} disabled={!running(data.status)}>{t.stop}</button></div></div><div className="workbench-grid"><aside className="stage-rail"><small>{t.stages}</small>{STAGES.map((stage) => <button key={stage.id} className={`stage-btn ${stage.id === data.stage ? "active" : ""} ${stage.id < (data.stage ?? 0) || (completed && stage.id === data.stage) ? "done" : ""}`}><b>{stage.id}</b><span><strong>{stage.label}</strong><small>{stage.hint}</small></span>{(stage.id < (data.stage ?? 0) || (completed && stage.id === data.stage)) && <i>✓</i>}</button>)}<div className="rail-run"><p>{data.node_summary}</p></div></aside><main className="workspace-main"><div className="workspace-title"><div><p className="eyebrow">{stageMeta(data.stage).label}</p><h1>{t.artifacts}</h1><p>{data.node_summary || "\u7b49\u5f85 Worker \u66f4\u65b0"}</p></div></div><section className="panel"><div className="panel-head"><h3>{"\u5df2\u7559\u6863\u4ea7\u7269"}</h3><span>{files.length} {"\u4e2a\u5f53\u524d\u7248\u672c"}</span></div><div className="artifact-list">{files.filter((item) => item.valid).map((item) => <button className={`artifact ${current === item.path ? "selected" : ""}`} key={item.id} onClick={() => setSelected(item.path)}><b>{item.path.endsWith(".md") ? "MD" : "JSON"}</b><span><strong>{item.path}</strong><small>r{item.revision} · {item.sha256.slice(0, 8)} {editable(item.path) ? "" : " · \u53ea\u8bfb"}</small></span></button>)}</div></section>{current && <section className="panel"><div className="panel-head"><h3>{current}</h3>{editable(current) && <div>{editing ? <><button className="btn" onClick={() => setEditing(false)}>{t.cancel}</button><button className="btn primary" onClick={() => save.mutate()}>{t.save}</button></> : <button className="btn" onClick={() => { setDraft(file.data?.content ?? ""); setEditing(true); }}>{t.edit}</button>}</div>}</div><div className="panel-body">{editable(current) ? editing ? <textarea className="editor" value={draft} onChange={(event) => setDraft(event.target.value)}/> : <pre className="preview">{file.data?.content ?? "\u6b63\u5728\u8bfb\u53d6\u4ea7\u7269\u2026"}</pre> : <p>{"\u8be5\u4ea7\u7269\u662f Worker \u7559\u6863\u7684\u53ea\u8bfb\u8bc1\u636e\uff0c\u4e0d\u5141\u8bb8\u5728\u5de5\u4f5c\u53f0\u76f4\u63a5\u4fee\u6539\u3002"}</p>}</div></section>}</main><aside className="review-panel"><p className="eyebrow">{t.review}</p><h2>{data.status === "waiting_human" ? "\u7b49\u5f85\u4f60\u7684\u51b3\u5b9a" : completed ? "\u672c\u6b21\u8fd0\u884c\u5df2\u5b8c\u6210" : "\u8fd0\u884c\u72b6\u6001"}</h2><p>{data.error_summary || (completed ? "\u8bfe\u7a0b\u5df2\u7559\u6863\u5e76\u53d1\u5e03\uff0c\u53ef\u8fd4\u56de\u8bfe\u7a0b\u8be6\u60c5\u8fdb\u5165\u9605\u8bfb\u5668\u3002" : "\u67e5\u770b\u4ea7\u7269\u4e0e\u8d28\u91cf\u8bc1\u636e\u540e\u63a8\u8fdb\u6d41\u7a0b\u3002")}</p><div className="gate"><b>{"\u5f53\u524d\u9636\u6bb5"}</b><span>{stageMeta(data.stage).label}</span></div><div className="decision-box">{data.status === "waiting_human" ? <><button className="btn primary" onClick={() => review.mutate("approve")}>{data.stage === 7 ? "\u6279\u51c6\u6b63\u5f0f\u53d1\u5e03" : t.approve}</button>{data.stage !== 7 && <button className="btn warn" onClick={() => review.mutate("rework")}>{t.rework}</button>}<button className="btn danger" onClick={() => review.mutate("stop")}>{t.stop}</button></> : <p>{completed ? "\u4fdd\u7559\u8fd0\u884c\u8bb0\u5f55\u4f9b\u8ffd\u6eaf\u3002" : "Worker \u6b63\u5728\u5904\u7406\uff1b\u4f60\u53ef\u4ee5\u5728\u9876\u90e8\u5b89\u5168\u6682\u505c\u6216\u505c\u6b62\u3002"}</p>}<ErrorText value={review.error}/></div><details><summary>Token {"\u4e0e\u8282\u70b9\u660e\u7ec6"}</summary>{data.token_ledger.map((item, index) => <p className="ledger" key={index}>{item.node} · {item.operation}<br/>{item.input_tokens ?? "—"} + {item.output_tokens ?? "—"} Token</p>)}</details></aside></div></Shell>; }
+function Workbench() {
+  const { courseId = "", runId = "" } = useParams();
+  const client = useQueryClient();
+  const run = useQuery({ queryKey: ["run", runId], queryFn: () => getRun(runId), refetchInterval: (query) => running(query.state.data?.status) ? 2000 : false });
+  const course = useQuery({ queryKey: ["course", courseId], queryFn: () => getCourse(courseId) });
+  const artifacts = useQuery({ queryKey: ["artifacts", courseId], queryFn: () => listArtifacts(courseId), refetchInterval: running(run.data?.status) ? 2000 : false });
+  const releases = useQuery({ queryKey: ["releases", courseId], queryFn: () => listReleases(courseId) });
+  const [selected, setSelected] = useState<string>();
+  const [viewStage, setViewStage] = useState<number>();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const data = run.data;
+  const files = latestArtifacts(artifacts.data ?? []);
+  const completed = data?.status === "completed";
+  const focusedStage = viewStage ?? data?.stage ?? (completed ? 7 : null);
+  const validFiles = files.filter((item) => item.valid);
+  const visibleItems = artifactsForStage(focusedStage, validFiles);
+  const archivedItems = validFiles.filter((item) => !visibleItems.some((visible) => visible.path === item.path));
+  const current = selected ?? initialFile(focusedStage, visibleItems) ?? visibleItems[0]?.path;
+  const viewingArchive = Boolean(selected && !visibleItems.some((item) => item.path === selected));
+  const release = releases.data?.find((item) => item.status === "rc") ?? releases.data?.find((item) => item.status === "published");
+
+  useEffect(() => {
+    setSelected(undefined);
+    setEditing(false);
+  }, [focusedStage]);
+
+  const file = useQuery({ queryKey: ["file", courseId, current], queryFn: () => getFile(courseId, current!), enabled: Boolean(current && editable(current)) });
+  const save = useMutation({
+    mutationFn: () => putFile(courseId, current!, draft),
+    onSuccess: () => {
+      setEditing(false);
+      client.invalidateQueries({ queryKey: ["file", courseId, current] });
+      client.invalidateQueries({ queryKey: ["artifacts", courseId] });
+    },
+  });
+  const refresh = () => {
+    client.invalidateQueries({ queryKey: ["run", runId] });
+    client.invalidateQueries({ queryKey: ["artifacts", courseId] });
+    client.invalidateQueries({ queryKey: ["releases", courseId] });
+  };
+  const review = useMutation({
+    mutationFn: (action: string) => {
+      const currentRun = run.data!;
+      const candidate = releases.data?.find((item) => item.status === "rc");
+      return postReview(runId, {
+        scope: currentRun.stage === 7 ? "release" : "stage",
+        target: currentRun.stage === 7 ? candidate?.version ?? "r0001" : "stage-" + currentRun.stage,
+        action,
+        evidence: {},
+      });
+    },
+    onSuccess: refresh,
+  });
+  const action = useMutation({ mutationFn: (kind: "pause" | "stop") => postAction(runId, kind), onSuccess: refresh });
+
+  if (!data) return <Shell><main>正在读取运行…<ErrorText value={run.error}/></main></Shell>;
+
+  const renderArtifact = (item: Artifact) => <button className={"artifact " + (current === item.path ? "selected" : "")} key={item.id} onClick={() => setSelected(item.path)}>
+    <b>{item.path.endsWith(".md") ? "MD" : "JSON"}</b>
+    <span><strong>{item.path}</strong><small>r{item.revision} · {item.sha256.slice(0, 8)}{editable(item.path) ? "" : " · 只读"}</small></span>
+  </button>;
+
+  return <Shell>
+    <div className="workbench-head">
+      <div><Link to={"/courses/" + courseId}>←</Link><strong>{course.data?.definition.title ?? "课程工作台"}</strong><Chip status={data.status}/></div>
+      <div className="run-summary"><span>Token {data.token_usage} / {data.token_limit ?? "∞"}</span><button className="btn" onClick={() => action.mutate("pause")} disabled={!running(data.status)}>{t.pause}</button><button className="btn danger" onClick={() => action.mutate("stop")} disabled={!running(data.status)}>{t.stop}</button></div>
+    </div>
+    <div className="workbench-grid">
+      <aside className="stage-rail">
+        <small>{t.stages}</small>
+        {STAGES.map((stage) => <button key={stage.id} onClick={() => setViewStage(stage.id)} className={"stage-btn " + (stage.id === focusedStage ? "active " : "") + (stage.id < (data.stage ?? 0) || (completed && stage.id <= (data.stage ?? 7)) ? "done" : "")}>
+          <b>{stage.id}</b><span><strong>{stage.label}</strong><small>{stage.hint}</small></span>{(stage.id < (data.stage ?? 0) || (completed && stage.id <= (data.stage ?? 7))) && <i>✓</i>}
+        </button>)}
+        <div className="rail-run"><p>{data.node_summary}</p></div>
+      </aside>
+      <main className="workspace-main">
+        <div className="workspace-title"><div><p className="eyebrow">{stageMeta(focusedStage).label}</p><h1>本阶段产出</h1><p>{focusedStage === data.stage ? data.node_summary || "等待 Worker 更新" : stageMeta(focusedStage).hint}</p></div></div>
+        {focusedStage === 7 && <section className="panel"><div className="panel-head"><h3>发布版本</h3><span>{release?.status ?? "尚未生成"}</span></div><div className="panel-body">{release ? <Link className="btn primary" to={"/courses/" + courseId + "/releases/" + release.version}>打开 {release.version} 课程阅读器</Link> : <p>本阶段尚未生成发布候选。</p>}</div></section>}
+        <section className="panel">
+          <div className="panel-head"><h3>审核产物</h3><span>{visibleItems.length} 个</span></div>
+          {visibleItems.length ? <div className="artifact-list">{visibleItems.map(renderArtifact)}</div> : focusedStage !== 7 && <div className="panel-body"><p>该阶段尚未生成可审核产物。</p></div>}
+        </section>
+        {archivedItems.length > 0 && <details className="panel artifact-archive"><summary>查看全部归档（{archivedItems.length} 个内部工件）</summary><div className="artifact-list">{archivedItems.map(renderArtifact)}</div></details>}
+        {current && <section className="panel">
+          <div className="panel-head"><h3>{current}{viewingArchive && <small> · 跨阶段归档</small>}</h3>{editable(current) && <div>{editing ? <><button className="btn" onClick={() => setEditing(false)}>{t.cancel}</button><button className="btn primary" onClick={() => save.mutate()}>{t.save}</button></> : <button className="btn" onClick={() => { setDraft(file.data?.content ?? ""); setEditing(true); }}>{t.edit}</button>}</div>}</div>
+          <div className="panel-body">{editable(current) ? editing ? <textarea className="editor" value={draft} onChange={(event) => setDraft(event.target.value)}/> : <pre className="preview">{file.data?.content ?? "正在读取产物…"}</pre> : <p>该工件是 Worker 留档的只读证据，不允许在工作台直接修改。</p>}</div>
+        </section>}
+      </main>
+      <aside className="review-panel">
+        <p className="eyebrow">{t.review}</p><h2>{data.status === "waiting_human" ? "等待你的决定" : completed ? "本次运行已完成" : "运行状态"}</h2>
+        <p>{data.error_summary || (completed ? "课程已留档并发布，可返回课程详情进入阅读器。" : "查看本阶段产物后推进流程。")}</p>
+        <div className="gate"><b>当前阶段</b><span>{stageMeta(data.stage).label}</span></div>
+        <div className="decision-box">{data.status === "waiting_human" ? <><button className="btn primary" onClick={() => review.mutate("approve")}>{data.stage === 7 ? "批准正式发布" : t.approve}</button>{data.stage !== 7 && <button className="btn warn" onClick={() => review.mutate("rework")}>{t.rework}</button>}<button className="btn danger" onClick={() => review.mutate("stop")}>{t.stop}</button></> : <p>{completed ? "保留运行记录供追溯。" : "Worker 正在处理；你可以在顶部安全暂停或停止。"}</p>}<ErrorText value={review.error}/></div>
+        <details><summary>Token 与节点明细</summary>{data.token_ledger.map((item, index) => <p className="ledger" key={index}>{item.node} · {item.operation}<br/>{item.input_tokens ?? "—"} + {item.output_tokens ?? "—"} Token</p>)}</details>
+      </aside>
+    </div>
+  </Shell>;
+}
 
 function LegacyReader() { const { courseId = "", version = "" } = useParams(); const course = useQuery({ queryKey: ["course", courseId], queryFn: () => getCourse(courseId) }); const artifacts = useQuery({ queryKey: ["artifacts", courseId], queryFn: () => listArtifacts(courseId) }); const release = useQuery({ queryKey: ["release", courseId, version], queryFn: () => getRelease(courseId, version) }); const batch = useQuery({ queryKey: ["file", courseId, "workspace/batches/batch-01.json"], queryFn: () => getFile(courseId, "workspace/batches/batch-01.json"), retry: false }); const lessons = useMemo(() => latestArtifacts(artifacts.data ?? []).filter((item) => item.valid && item.path.startsWith("lessons/")).sort((a, b) => a.path.localeCompare(b.path)), [artifacts.data]); const chapters = useMemo(() => { try { return (JSON.parse(batch.data?.content ?? "{}") as { chapters?: { title?: string; lesson_path?: string }[] }).chapters ?? []; } catch { return []; } }, [batch.data]); const chapterTitle = (path: string) => chapters.find((chapter) => chapter.lesson_path === path)?.title ?? path.replace("lessons/", ""); const [index, setIndex] = useState(0); const lesson = lessons[index]; const file = useQuery({ queryKey: ["file", courseId, lesson?.path], queryFn: () => getFile(courseId, lesson!.path), enabled: Boolean(lesson) }); const content = lessonText(file.data?.content); const download = () => { if (!content || !lesson) return; const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([content], { type: "text/markdown;charset=utf-8" })); link.download = lesson.path.split("/").pop() ?? "lesson.md"; link.click(); URL.revokeObjectURL(link.href); }; return <Shell><main className="reader"><Link to={`/courses/${courseId}`}>← {"\u8fd4\u56de\u8bfe\u7a0b"}</Link><p className="eyebrow">{t.reader} · {version}</p><h1>{course.data?.definition.title}</h1><p>{course.data?.definition.audience}</p><div className="reader-grid"><aside className="toc"><b>{"\u76ee\u5f55"}</b>{lessons.map((item, itemIndex) => <button className={itemIndex === index ? "selected" : ""} key={item.id} onClick={() => setIndex(itemIndex)}>{chapterTitle(item.path)}</button>)}</aside><section className="reader-content"><div className="reader-tools"><span>{index + 1} / {lessons.length || 0}</span><button className="btn" onClick={download} disabled={!content}>{t.download}</button></div><pre className="lesson-content">{content || "\u6b63\u5728\u8bfb\u53d6\u7ae0\u8282\u2026"}</pre><div className="reader-pager"><button className="btn" onClick={() => setIndex(Math.max(0, index - 1))} disabled={index === 0}>{t.previous}</button><button className="btn" onClick={() => setIndex(Math.min(lessons.length - 1, index + 1))} disabled={index >= lessons.length - 1}>{t.next}</button></div></section></div>{release.data && <details className="release-details"><summary>{"\u53d1\u5e03\u6e05\u5355"}</summary><pre>{JSON.stringify(release.data, null, 2)}</pre></details>}</main></Shell>; }
 
