@@ -4,14 +4,15 @@ import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from "reac
 import { Artifact, Course, Definition, createCourse, createRun, getCourse, getFile, getRelease, getRun, listArtifacts, listCourses, listReleases, listRuns, postAction, postReview, putFile } from "./api";
 import { STAGES, stageMeta } from "./stages";
 import { artifactsForStage } from "./workbenchArtifacts";
+import { canEditArtifact, isEditableArtifact, summarizeTokenUsage } from "./workbenchUsage";
 import { ReleaseReader } from "./ReleaseReader";
 import "./styles.css";
+import "./workbench.css";
 
 export const t = {
   name: "\u8bfe\u7a0b\u751f\u6210\u5668", library: "\u8bfe\u7a0b\u5e93", newCourse: "\u65b0\u5efa\u8bfe\u7a0b", back: "\u8fd4\u56de\u8bfe\u7a0b\u5e93", create: "\u521b\u5efa\u8bfe\u7a0b\u5e76\u8fdb\u5165\u5de5\u4f5c\u53f0", start: "\u542f\u52a8\u751f\u6210\u8fd0\u884c", stages: "\u751f\u4ea7\u9636\u6bb5", artifacts: "\u5de5\u4f5c\u4ea7\u7269", review: "\u4eba\u5de5\u5ba1\u67e5", approve: "\u6279\u51c6\u5e76\u7ee7\u7eed", rework: "\u8981\u6c42\u8fd4\u5de5", pause: "\u5b89\u5168\u6682\u505c", stop: "\u505c\u6b62", edit: "\u7f16\u8f91", save: "\u4fdd\u5b58\u4fee\u8ba2", cancel: "\u53d6\u6d88", reader: "\u8bfe\u7a0b\u9605\u8bfb\u5668", download: "\u4e0b\u8f7d Markdown", previous: "\u4e0a\u4e00\u7ae0", next: "\u4e0b\u4e00\u7ae0"
 };
 const running = (status?: string) => status === "queued" || status === "running";
-const editable = (path: string) => path === "course.json" || path === "workspace/MISSION.md" || path === "workspace/SPEC.md" || path === "workspace/BLUEPRINT.md" || path === "workspace/RESOURCES.md" || path.startsWith("workspace/batches/") || path.startsWith("lessons/");
 const initialFile = (stage: number | null, items: Artifact[]) => ({ 1: "course.json", 2: "workspace/MISSION.md", 3: "workspace/BLUEPRINT.md", 4: "workspace/batches/batch-01.json", 5: items.find((a) => a.path.startsWith("lessons/"))?.path }[stage ?? 0]);
 const latestArtifacts = (items: Artifact[]) => Array.from(items.reduce((byPath, item) => { const prior = byPath.get(item.path); if (!prior || item.revision > prior.revision) byPath.set(item.path, item); return byPath; }, new Map<string, Artifact>()).values());
 const lessonText = (content?: string) => { if (!content) return ""; try { const parsed = JSON.parse(content) as { markdown?: unknown }; return typeof parsed.markdown === "string" ? parsed.markdown : content; } catch { return content; } };
@@ -49,13 +50,16 @@ function Workbench() {
   const current = selected ?? initialFile(focusedStage, visibleItems) ?? visibleItems[0]?.path;
   const viewingArchive = Boolean(selected && !visibleItems.some((item) => item.path === selected));
   const release = releases.data?.find((item) => item.status === "rc") ?? releases.data?.find((item) => item.status === "published");
+  const currentIsEditable = Boolean(current && canEditArtifact(current, data?.status));
+  const currentHasContent = Boolean(current && isEditableArtifact(current));
+  const tokenUsage = summarizeTokenUsage(data?.token_ledger ?? [], data?.token_limit ?? null);
 
   useEffect(() => {
     setSelected(undefined);
     setEditing(false);
   }, [focusedStage]);
 
-  const file = useQuery({ queryKey: ["file", courseId, current], queryFn: () => getFile(courseId, current!), enabled: Boolean(current && editable(current)) });
+  const file = useQuery({ queryKey: ["file", courseId, current], queryFn: () => getFile(courseId, current!), enabled: currentHasContent });
   const save = useMutation({
     mutationFn: () => putFile(courseId, current!, draft),
     onSuccess: () => {
@@ -88,7 +92,7 @@ function Workbench() {
 
   const renderArtifact = (item: Artifact) => <button className={"artifact " + (current === item.path ? "selected" : "")} key={item.id} onClick={() => setSelected(item.path)}>
     <b>{item.path.endsWith(".md") ? "MD" : "JSON"}</b>
-    <span><strong>{item.path}</strong><small>r{item.revision} · {item.sha256.slice(0, 8)}{editable(item.path) ? "" : " · 只读"}</small></span>
+    <span><strong>{item.path}</strong><small>r{item.revision} · {item.sha256.slice(0, 8)}{canEditArtifact(item.path, data.status) ? "" : " · 只读"}</small></span>
   </button>;
 
   return <Shell>
@@ -102,19 +106,19 @@ function Workbench() {
         {STAGES.map((stage) => <button key={stage.id} onClick={() => setViewStage(stage.id)} className={"stage-btn " + (stage.id === focusedStage ? "active " : "") + (stage.id < (data.stage ?? 0) || (completed && stage.id <= (data.stage ?? 7)) ? "done" : "")}>
           <b>{stage.id}</b><span><strong>{stage.label}</strong><small>{stage.hint}</small></span>{(stage.id < (data.stage ?? 0) || (completed && stage.id <= (data.stage ?? 7))) && <i>✓</i>}
         </button>)}
-        <div className="rail-run"><p>{data.node_summary}</p></div>
+        <div className="rail-run"><p>{completed ? "已完成，可点击任一阶段回看对应产物。" : "点击任一阶段查看对应产物。"}</p></div>
       </aside>
       <main className="workspace-main">
-        <div className="workspace-title"><div><p className="eyebrow">{stageMeta(focusedStage).label}</p><h1>本阶段产出</h1><p>{focusedStage === data.stage ? data.node_summary || "等待 Worker 更新" : stageMeta(focusedStage).hint}</p></div></div>
-        {focusedStage === 7 && <section className="panel"><div className="panel-head"><h3>发布版本</h3><span>{release?.status ?? "尚未生成"}</span></div><div className="panel-body">{release ? <Link className="btn primary" to={"/courses/" + courseId + "/releases/" + release.version}>打开 {release.version} 课程阅读器</Link> : <p>本阶段尚未生成发布候选。</p>}</div></section>}
-        <section className="panel">
+        <div className="workspace-title"><div><p className="eyebrow">{stageMeta(focusedStage).label}</p><h1>本阶段产出</h1><p>{stageMeta(focusedStage).hint}</p></div></div>
+        {focusedStage === 7 && <section className="panel"><div className="panel-head"><h3>发布版本</h3><span>{release?.status === "published" ? "已发布" : release?.status === "rc" ? "待发布" : "尚未生成"}</span></div><div className="panel-body">{release ? <><p className="release-note">已生成正式课程版本，可在阅读器中查看。</p><Link className="btn primary" to={"/courses/" + courseId + "/releases/" + release.version}>打开 {release.version} 课程阅读器</Link></> : <p>本阶段尚未生成发布候选。</p>}</div></section>}
+        {focusedStage !== 7 && <section className="panel">
           <div className="panel-head"><h3>审核产物</h3><span>{visibleItems.length} 个</span></div>
           {visibleItems.length ? <div className="artifact-list">{visibleItems.map(renderArtifact)}</div> : focusedStage !== 7 && <div className="panel-body"><p>该阶段尚未生成可审核产物。</p></div>}
-        </section>
-        {archivedItems.length > 0 && <details className="panel artifact-archive"><summary>查看全部归档（{archivedItems.length} 个内部工件）</summary><div className="artifact-list">{archivedItems.map(renderArtifact)}</div></details>}
+        </section>}
+        {archivedItems.length > 0 && <details className="panel artifact-archive"><summary>查看其他留档（{archivedItems.length} 个内部工件）</summary><div className="artifact-list">{archivedItems.map(renderArtifact)}</div></details>}
         {current && <section className="panel">
-          <div className="panel-head"><h3>{current}{viewingArchive && <small> · 跨阶段归档</small>}</h3>{editable(current) && <div>{editing ? <><button className="btn" onClick={() => setEditing(false)}>{t.cancel}</button><button className="btn primary" onClick={() => save.mutate()}>{t.save}</button></> : <button className="btn" onClick={() => { setDraft(file.data?.content ?? ""); setEditing(true); }}>{t.edit}</button>}</div>}</div>
-          <div className="panel-body">{editable(current) ? editing ? <textarea className="editor" value={draft} onChange={(event) => setDraft(event.target.value)}/> : <pre className="preview">{file.data?.content ?? "正在读取产物…"}</pre> : <p>该工件是 Worker 留档的只读证据，不允许在工作台直接修改。</p>}</div>
+          <div className="panel-head"><h3>{current}{viewingArchive && <small> · 跨阶段归档</small>}</h3>{currentIsEditable ? <div>{editing ? <><button className="btn" onClick={() => setEditing(false)}>{t.cancel}</button><button className="btn primary" onClick={() => save.mutate()}>{t.save}</button></> : <button className="btn" onClick={() => { setDraft(file.data?.content ?? ""); setEditing(true); }}>{t.edit}</button>}</div> : completed && currentHasContent ? <span className="readonly-badge">已归档，只读</span> : null}</div>
+          <div className="panel-body">{currentHasContent ? <>{completed && <p className="readonly-note">该课程已完成并发布。这里保留的是当时的生产记录，不能再直接修改；如需调整，请从课程详情创建新的运行。</p>}{editing ? <textarea className="editor" value={draft} onChange={(event) => setDraft(event.target.value)}/> : <pre className="preview">{file.data?.content ?? "正在读取产物…"}</pre>}</> : <p>该工件是 Worker 留档的只读证据，不允许在工作台直接修改。</p>}</div>
         </section>}
       </main>
       <aside className="review-panel">
@@ -122,7 +126,13 @@ function Workbench() {
         <p>{data.error_summary || (completed ? "课程已留档并发布，可返回课程详情进入阅读器。" : "查看本阶段产物后推进流程。")}</p>
         <div className="gate"><b>当前阶段</b><span>{stageMeta(data.stage).label}</span></div>
         <div className="decision-box">{data.status === "waiting_human" ? <><button className="btn primary" onClick={() => review.mutate("approve")}>{data.stage === 7 ? "批准正式发布" : t.approve}</button>{data.stage !== 7 && <button className="btn warn" onClick={() => review.mutate("rework")}>{t.rework}</button>}<button className="btn danger" onClick={() => review.mutate("stop")}>{t.stop}</button></> : <p>{completed ? "保留运行记录供追溯。" : "Worker 正在处理；你可以在顶部安全暂停或停止。"}</p>}<ErrorText value={review.error}/></div>
-        <details><summary>Token 与节点明细</summary>{data.token_ledger.map((item, index) => <p className="ledger" key={index}>{item.node} · {item.operation}<br/>{item.input_tokens ?? "—"} + {item.output_tokens ?? "—"} Token</p>)}</details>
+        <details className="usage-details">
+          <summary>模型用量说明</summary>
+          <p className="usage-intro">Token 是模型读取和生成文本时消耗的计量单位。用量越高，通常代表生成内容或审核轮次更多。</p>
+          <div className="usage-total"><b>{data.token_usage.toLocaleString()} Token</b><span>{data.token_limit ? `额度 ${data.token_limit.toLocaleString()} · 已使用 ${tokenUsage.percent}%` : "未设置额度上限"}</span></div>
+          <p className="usage-calls">本次课程共进行了 {tokenUsage.calls} 次模型调用。</p>
+          <div className="usage-groups">{tokenUsage.groups.map((group) => <div className="usage-group" key={group.label}><b>{group.label}</b><span>{group.calls} 次 · {group.totalTokens.toLocaleString()} Token</span><small>模型读取 {group.inputTokens.toLocaleString()}，生成 {group.outputTokens.toLocaleString()}</small></div>)}</div>
+        </details>
       </aside>
     </div>
   </Shell>;

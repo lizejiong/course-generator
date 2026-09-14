@@ -1,0 +1,13 @@
+.workspace-main{padding:26px clamp(24px,4vw,64px);background:#f4f8fc}
+.workspace-title{margin:0 0 16px}.workspace-title h1{font-size:24px;line-height:1.25}.workspace-title p:not(.eyebrow){font-size:14px;line-height:1.5}
+.rail-run{margin-top:18px}.artifact-archive summary{padding:13px 15px;font-weight:800;cursor:pointer;color:#49657f}
+.artifact-archive[open] summary{border-bottom:1px solid #e3edf6}
+.release-note{margin:0 0 13px;color:#6e849d;font-size:13px;line-height:1.55}
+.readonly-badge{font-size:11px;font-weight:800;color:#5c7895;background:#eef3f8;border-radius:999px;padding:5px 8px}
+.readonly-note{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#f5f8fb;color:#607890;font-size:12px;line-height:1.65}
+.usage-details{padding-top:16px;font-size:13px;color:#536e89}.usage-details summary{font-weight:800;cursor:pointer}
+.usage-intro,.usage-calls{margin:10px 0;color:#6e849d;line-height:1.6;font-size:12px}
+.usage-total{display:grid;gap:3px;padding:11px;border-radius:9px;background:#eef6fe;color:#2967a9}
+.usage-total b{font-size:15px}.usage-total span,.usage-group small{font-size:11px}
+.usage-groups{display:grid;gap:8px;margin-top:10px}.usage-group{display:grid;gap:3px;padding:9px 0;border-bottom:1px solid #edf2f7}
+.usage-group b{font-size:12px;color:#405973}.usage-group span{font-size:11px;color:#597490}
